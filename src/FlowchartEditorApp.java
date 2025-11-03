@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.Map;
 
 /**
  * Main application window for the Flowchart Editor using JGraphX.
@@ -9,6 +10,10 @@ import java.awt.event.*;
 public class FlowchartEditorApp extends JFrame {
 
     private FlowchartPanel flowchartPanel;
+    private ExecutionControlPanel controlPanel;
+    private OutputPanel outputPanel;
+    private VariablesPanel variablesPanel;
+    private FlowchartInterpreter interpreter;
 
     public FlowchartEditorApp() {
         setTitle("Flowchart Editor - JGraphX Version");
@@ -38,11 +43,182 @@ public class FlowchartEditorApp extends JFrame {
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
-        add(scrollPane, BorderLayout.CENTER);
+        // Create execution panels
+        controlPanel = new ExecutionControlPanel();
+        outputPanel = new OutputPanel();
+        variablesPanel = new VariablesPanel();
+
+        // Create interpreter
+        interpreter = new FlowchartInterpreter(
+            flowchartPanel.getGraph(),
+            flowchartPanel.getStartCell(),
+            flowchartPanel.getEndCell()
+        );
+
+        // Setup interpreter listener
+        setupInterpreter();
+
+        // Setup control panel listener
+        setupControlPanel();
+
+        // Create right panel with output and variables
+        JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, outputPanel, variablesPanel);
+        rightSplitPane.setDividerLocation(300);
+        rightSplitPane.setResizeWeight(0.5);
+
+        // Create main split pane
+        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollPane, rightSplitPane);
+        mainSplitPane.setDividerLocation(900);
+        mainSplitPane.setResizeWeight(0.7);
+
+        // Layout
+        add(controlPanel, BorderLayout.NORTH);
+        add(mainSplitPane, BorderLayout.CENTER);
 
         // Status bar
         JPanel statusBar = createStatusBar();
         add(statusBar, BorderLayout.SOUTH);
+    }
+
+    private void setupInterpreter() {
+        interpreter.setExecutionListener(new FlowchartInterpreter.ExecutionListener() {
+            @Override
+            public void onExecutionStep(Object cell, Map<String, Object> variables, String output) {
+                // Update UI
+                SwingUtilities.invokeLater(() -> {
+                    flowchartPanel.highlightCell(cell);
+                    variablesPanel.updateVariables(variables);
+                    outputPanel.setOutput(output);
+                });
+
+                // Add delay for visualization
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            @Override
+            public void onExecutionComplete() {
+                SwingUtilities.invokeLater(() -> {
+                    flowchartPanel.clearHighlight();
+                    controlPanel.setStatus("Execution completed");
+                    controlPanel.setRunning(false);
+                });
+            }
+
+            @Override
+            public void onExecutionError(String error) {
+                SwingUtilities.invokeLater(() -> {
+                    flowchartPanel.clearHighlight();
+                    controlPanel.setStatus("Error: " + error);
+                    controlPanel.setRunning(false);
+                    JOptionPane.showMessageDialog(
+                        FlowchartEditorApp.this,
+                        error,
+                        "Execution Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                });
+            }
+
+            @Override
+            public void onInputRequired(String variableName, FlowchartInterpreter.InputCallback callback) {
+                SwingUtilities.invokeLater(() -> {
+                    String input = JOptionPane.showInputDialog(
+                        FlowchartEditorApp.this,
+                        "Enter value for: " + variableName,
+                        "Input Required",
+                        JOptionPane.QUESTION_MESSAGE
+                    );
+
+                    if (input != null) {
+                        callback.onInputProvided(input);
+                    } else {
+                        // User cancelled
+                        interpreter.stop();
+                    }
+                });
+            }
+        });
+    }
+
+    private void setupControlPanel() {
+        controlPanel.setExecutionControlListener(new ExecutionControlPanel.ExecutionControlListener() {
+            @Override
+            public void onRun() {
+                // Reset UI
+                outputPanel.clear();
+                variablesPanel.clear();
+                flowchartPanel.clearHighlight();
+
+                // Update interpreter with current graph state
+                interpreter = new FlowchartInterpreter(
+                    flowchartPanel.getGraph(),
+                    flowchartPanel.getStartCell(),
+                    flowchartPanel.getEndCell()
+                );
+                setupInterpreter();
+
+                // Start execution in background thread
+                controlPanel.setStatus("Running...");
+                controlPanel.setRunning(true);
+
+                new Thread(() -> {
+                    interpreter.start();
+                }).start();
+            }
+
+            @Override
+            public void onStep() {
+                if (!interpreter.isRunning()) {
+                    // First step - reset UI
+                    outputPanel.clear();
+                    variablesPanel.clear();
+                    flowchartPanel.clearHighlight();
+
+                    // Update interpreter
+                    interpreter = new FlowchartInterpreter(
+                        flowchartPanel.getGraph(),
+                        flowchartPanel.getStartCell(),
+                        flowchartPanel.getEndCell()
+                    );
+                    setupInterpreter();
+                }
+
+                controlPanel.setStatus("Stepping...");
+                controlPanel.setStepping(true);
+
+                new Thread(() -> {
+                    interpreter.step();
+
+                    SwingUtilities.invokeLater(() -> {
+                        if (!interpreter.isRunning()) {
+                            controlPanel.setStatus("Execution completed");
+                            controlPanel.setRunning(false);
+                        }
+                    });
+                }).start();
+            }
+
+            @Override
+            public void onStop() {
+                interpreter.stop();
+                flowchartPanel.clearHighlight();
+                controlPanel.setStatus("Stopped");
+                controlPanel.setRunning(false);
+            }
+
+            @Override
+            public void onReset() {
+                interpreter.reset();
+                flowchartPanel.clearHighlight();
+                outputPanel.clear();
+                variablesPanel.clear();
+                controlPanel.setStatus("Ready");
+            }
+        });
     }
 
     private void setupMenuBar() {

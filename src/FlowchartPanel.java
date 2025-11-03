@@ -48,6 +48,10 @@ public class FlowchartPanel extends JPanel {
     // Track merge points for conditionals
     private Map<Object, Object> conditionalMergePoints = new HashMap<>();
 
+    // Track highlighted cell during execution
+    private Object highlightedCell = null;
+    private String originalCellStyle = null;
+
     public FlowchartPanel() {
         setLayout(new BorderLayout());
 
@@ -782,5 +786,80 @@ public class FlowchartPanel extends JPanel {
             "The new block will be inserted in the middle of the edge.",
             "How to Add Blocks",
             JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    // ===== EXECUTION HIGHLIGHTING =====
+
+    /**
+     * Highlight a cell during execution
+     */
+    public void highlightCell(Object cell) {
+        // Remove previous highlight
+        clearHighlight();
+
+        if (cell != null && graph.getModel().isVertex(cell)) {
+            mxCell vertex = (mxCell) cell;
+
+            // Save original style
+            highlightedCell = cell;
+            originalCellStyle = vertex.getStyle();
+
+            // Apply highlight style
+            graph.getModel().beginUpdate();
+            try {
+                String currentStyle = originalCellStyle != null ? originalCellStyle : "";
+
+                // Add yellow border and shadow to highlight
+                String highlightStyle = currentStyle + ";strokeColor=#FFD700;strokeWidth=4;shadow=1";
+                graph.getModel().setStyle(cell, highlightStyle);
+
+            } finally {
+                graph.getModel().endUpdate();
+            }
+
+            // Refresh the view
+            graphComponent.refresh();
+        }
+    }
+
+    /**
+     * Clear the current highlight
+     */
+    public void clearHighlight() {
+        if (highlightedCell != null) {
+            graph.getModel().beginUpdate();
+            try {
+                // Restore original style
+                graph.getModel().setStyle(highlightedCell, originalCellStyle);
+
+            } finally {
+                graph.getModel().endUpdate();
+            }
+
+            highlightedCell = null;
+            originalCellStyle = null;
+            graphComponent.refresh();
+        }
+    }
+
+    /**
+     * Get the graph for external use
+     */
+    public mxGraph getGraph() {
+        return graph;
+    }
+
+    /**
+     * Get start cell
+     */
+    public Object getStartCell() {
+        return startCell;
+    }
+
+    /**
+     * Get end cell
+     */
+    public Object getEndCell() {
+        return endCell;
     }
 }
