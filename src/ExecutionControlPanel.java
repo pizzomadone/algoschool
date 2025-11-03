@@ -15,6 +15,15 @@ public class ExecutionControlPanel extends JPanel {
 
     private ExecutionControlListener listener;
 
+    // Stati di esecuzione
+    public enum ExecutionState {
+        IDLE,       // Nessuna esecuzione in corso
+        RUNNING,    // Esecuzione automatica in corso
+        STEPPING    // Esecuzione step-by-step in corso
+    }
+
+    private ExecutionState currentState = ExecutionState.IDLE;
+
     public interface ExecutionControlListener {
         void onRun();
         void onStep();
@@ -29,8 +38,8 @@ public class ExecutionControlPanel extends JPanel {
         // Pannello pulsanti
         JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
-        runButton = new JButton("▶ Run");
-        runButton.setToolTipText("Execute the entire flowchart");
+        runButton = new JButton("▶ Run All");
+        runButton.setToolTipText("Execute the entire flowchart automatically");
         runButton.setFont(new Font("Arial", Font.BOLD, 12));
         runButton.setBackground(new Color(76, 175, 80));
         runButton.setForeground(Color.WHITE);
@@ -41,8 +50,8 @@ public class ExecutionControlPanel extends JPanel {
             }
         });
 
-        stepButton = new JButton("⏯ Step");
-        stepButton.setToolTipText("Execute one step at a time");
+        stepButton = new JButton("⏯ Next Step");
+        stepButton.setToolTipText("<html>Execute one step at a time<br>Click repeatedly to advance through the flowchart</html>");
         stepButton.setFont(new Font("Arial", Font.BOLD, 12));
         stepButton.setBackground(new Color(33, 150, 243));
         stepButton.setForeground(Color.WHITE);
@@ -54,7 +63,7 @@ public class ExecutionControlPanel extends JPanel {
         });
 
         stopButton = new JButton("⏹ Stop");
-        stopButton.setToolTipText("Stop execution");
+        stopButton.setToolTipText("Stop the current execution");
         stopButton.setFont(new Font("Arial", Font.BOLD, 12));
         stopButton.setBackground(new Color(244, 67, 54));
         stopButton.setForeground(Color.WHITE);
@@ -67,7 +76,7 @@ public class ExecutionControlPanel extends JPanel {
         });
 
         resetButton = new JButton("↻ Reset");
-        resetButton.setToolTipText("Reset execution state");
+        resetButton.setToolTipText("Reset execution state and clear output");
         resetButton.setFont(new Font("Arial", Font.BOLD, 12));
         resetButton.setBackground(new Color(158, 158, 158));
         resetButton.setForeground(Color.WHITE);
@@ -100,19 +109,63 @@ public class ExecutionControlPanel extends JPanel {
         statusLabel.setText(status);
     }
 
-    public void setRunning(boolean running) {
-        runButton.setEnabled(!running);
-        stepButton.setEnabled(!running);
-        stopButton.setEnabled(running);
-        resetButton.setEnabled(!running);
+    /**
+     * Imposta lo stato di esecuzione e aggiorna i pulsanti di conseguenza
+     */
+    public void setState(ExecutionState state) {
+        currentState = state;
+        updateButtonStates();
     }
 
+    /**
+     * Aggiorna lo stato dei pulsanti in base allo stato corrente
+     */
+    private void updateButtonStates() {
+        switch (currentState) {
+            case IDLE:
+                // Pronto per iniziare: Run e Step disponibili
+                runButton.setEnabled(true);
+                stepButton.setEnabled(true);
+                stopButton.setEnabled(false);
+                resetButton.setEnabled(true);
+                break;
+
+            case RUNNING:
+                // Esecuzione automatica: solo Stop disponibile
+                runButton.setEnabled(false);
+                stepButton.setEnabled(false);
+                stopButton.setEnabled(true);
+                resetButton.setEnabled(false);
+                break;
+
+            case STEPPING:
+                // Esecuzione step-by-step: Run per continuare automaticamente,
+                // Step per il prossimo step, Stop per fermare
+                runButton.setEnabled(true);
+                stepButton.setEnabled(true);
+                stopButton.setEnabled(true);
+                resetButton.setEnabled(true);
+                break;
+        }
+    }
+
+    /**
+     * Ritorna lo stato corrente
+     */
+    public ExecutionState getState() {
+        return currentState;
+    }
+
+    // Metodi deprecati per compatibilità
+    @Deprecated
+    public void setRunning(boolean running) {
+        setState(running ? ExecutionState.RUNNING : ExecutionState.IDLE);
+    }
+
+    @Deprecated
     public void setStepping(boolean stepping) {
         if (stepping) {
-            runButton.setEnabled(true);
-            stepButton.setEnabled(true);
-            stopButton.setEnabled(true);
-            resetButton.setEnabled(true);
+            setState(ExecutionState.STEPPING);
         }
     }
 }

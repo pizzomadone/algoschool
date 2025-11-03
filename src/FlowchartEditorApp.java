@@ -104,7 +104,7 @@ public class FlowchartEditorApp extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     flowchartPanel.clearHighlight();
                     controlPanel.setStatus("Execution completed");
-                    controlPanel.setRunning(false);
+                    controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
                 });
             }
 
@@ -113,7 +113,7 @@ public class FlowchartEditorApp extends JFrame {
                 SwingUtilities.invokeLater(() -> {
                     flowchartPanel.clearHighlight();
                     controlPanel.setStatus("Error: " + error);
-                    controlPanel.setRunning(false);
+                    controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
                     JOptionPane.showMessageDialog(
                         FlowchartEditorApp.this,
                         error,
@@ -148,26 +148,49 @@ public class FlowchartEditorApp extends JFrame {
         controlPanel.setExecutionControlListener(new ExecutionControlPanel.ExecutionControlListener() {
             @Override
             public void onRun() {
-                // Reset UI
-                outputPanel.clear();
-                variablesPanel.clear();
-                flowchartPanel.clearHighlight();
+                // Se siamo in modalità stepping, continua da dove eravamo
+                if (controlPanel.getState() == ExecutionControlPanel.ExecutionState.STEPPING) {
+                    // Passa da stepping a running: continua l'esecuzione automatica
+                    controlPanel.setStatus("Running...");
+                    controlPanel.setState(ExecutionControlPanel.ExecutionState.RUNNING);
 
-                // Update interpreter with current graph state
-                interpreter = new FlowchartInterpreter(
-                    flowchartPanel.getGraph(),
-                    flowchartPanel.getStartCell(),
-                    flowchartPanel.getEndCell()
-                );
-                setupInterpreter();
+                    new Thread(() -> {
+                        // Riprendi esecuzione automatica
+                        while (interpreter.isRunning() &&
+                               interpreter.getCurrentCell() != flowchartPanel.getEndCell()) {
+                            interpreter.step();
+                        }
 
-                // Start execution in background thread
-                controlPanel.setStatus("Running...");
-                controlPanel.setRunning(true);
+                        // Esecuzione completata
+                        SwingUtilities.invokeLater(() -> {
+                            flowchartPanel.clearHighlight();
+                            controlPanel.setStatus("Execution completed");
+                            controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
+                        });
+                    }).start();
 
-                new Thread(() -> {
-                    interpreter.start();
-                }).start();
+                } else {
+                    // Nuova esecuzione - reset UI
+                    outputPanel.clear();
+                    variablesPanel.clear();
+                    flowchartPanel.clearHighlight();
+
+                    // Update interpreter with current graph state
+                    interpreter = new FlowchartInterpreter(
+                        flowchartPanel.getGraph(),
+                        flowchartPanel.getStartCell(),
+                        flowchartPanel.getEndCell()
+                    );
+                    setupInterpreter();
+
+                    // Start execution in background thread
+                    controlPanel.setStatus("Running...");
+                    controlPanel.setState(ExecutionControlPanel.ExecutionState.RUNNING);
+
+                    new Thread(() -> {
+                        interpreter.start();
+                    }).start();
+                }
             }
 
             @Override
@@ -185,18 +208,29 @@ public class FlowchartEditorApp extends JFrame {
                         flowchartPanel.getEndCell()
                     );
                     setupInterpreter();
+
+                    controlPanel.setStatus("Step-by-step mode - Click 'Next Step' to continue");
+                } else {
+                    controlPanel.setStatus("Executing step...");
                 }
 
-                controlPanel.setStatus("Stepping...");
-                controlPanel.setStepping(true);
+                // Imposta stato stepping
+                controlPanel.setState(ExecutionControlPanel.ExecutionState.STEPPING);
 
                 new Thread(() -> {
                     interpreter.step();
 
                     SwingUtilities.invokeLater(() -> {
-                        if (!interpreter.isRunning()) {
+                        if (!interpreter.isRunning() ||
+                            interpreter.getCurrentCell() == flowchartPanel.getEndCell()) {
+                            // Esecuzione completata
+                            flowchartPanel.clearHighlight();
                             controlPanel.setStatus("Execution completed");
-                            controlPanel.setRunning(false);
+                            controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
+                        } else {
+                            // Pronto per il prossimo step
+                            controlPanel.setStatus("Ready for next step - Click 'Next Step' to continue");
+                            controlPanel.setState(ExecutionControlPanel.ExecutionState.STEPPING);
                         }
                     });
                 }).start();
@@ -207,7 +241,7 @@ public class FlowchartEditorApp extends JFrame {
                 interpreter.stop();
                 flowchartPanel.clearHighlight();
                 controlPanel.setStatus("Stopped");
-                controlPanel.setRunning(false);
+                controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
             }
 
             @Override
@@ -217,6 +251,7 @@ public class FlowchartEditorApp extends JFrame {
                 outputPanel.clear();
                 variablesPanel.clear();
                 controlPanel.setStatus("Ready");
+                controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
             }
         });
     }
