@@ -40,10 +40,13 @@ public class ExecutionControlPanel extends JPanel {
 
         runButton = new JButton("▶ Run All");
         runButton.setToolTipText("Execute the entire flowchart automatically");
-        runButton.setFont(new Font("Arial", Font.BOLD, 12));
+        runButton.setFont(new Font("Arial", Font.BOLD, 14));
         runButton.setBackground(new Color(76, 175, 80));
         runButton.setForeground(Color.WHITE);
+        runButton.setOpaque(true);
+        runButton.setBorderPainted(false);
         runButton.setFocusPainted(false);
+        runButton.setPreferredSize(new Dimension(120, 35));
         runButton.addActionListener(e -> {
             if (listener != null) {
                 listener.onRun();
@@ -52,10 +55,13 @@ public class ExecutionControlPanel extends JPanel {
 
         stepButton = new JButton("⏯ Next Step");
         stepButton.setToolTipText("<html>Execute one step at a time<br>Click repeatedly to advance through the flowchart</html>");
-        stepButton.setFont(new Font("Arial", Font.BOLD, 12));
+        stepButton.setFont(new Font("Arial", Font.BOLD, 14));
         stepButton.setBackground(new Color(33, 150, 243));
         stepButton.setForeground(Color.WHITE);
+        stepButton.setOpaque(true);
+        stepButton.setBorderPainted(false);
         stepButton.setFocusPainted(false);
+        stepButton.setPreferredSize(new Dimension(130, 35));
         stepButton.addActionListener(e -> {
             if (listener != null) {
                 listener.onStep();
@@ -64,11 +70,14 @@ public class ExecutionControlPanel extends JPanel {
 
         stopButton = new JButton("⏹ Stop");
         stopButton.setToolTipText("Stop the current execution");
-        stopButton.setFont(new Font("Arial", Font.BOLD, 12));
+        stopButton.setFont(new Font("Arial", Font.BOLD, 14));
         stopButton.setBackground(new Color(244, 67, 54));
         stopButton.setForeground(Color.WHITE);
+        stopButton.setOpaque(true);
+        stopButton.setBorderPainted(false);
         stopButton.setFocusPainted(false);
         stopButton.setEnabled(false);
+        stopButton.setPreferredSize(new Dimension(90, 35));
         stopButton.addActionListener(e -> {
             if (listener != null) {
                 listener.onStop();
@@ -77,10 +86,13 @@ public class ExecutionControlPanel extends JPanel {
 
         resetButton = new JButton("↻ Reset");
         resetButton.setToolTipText("Reset execution state and clear output");
-        resetButton.setFont(new Font("Arial", Font.BOLD, 12));
+        resetButton.setFont(new Font("Arial", Font.BOLD, 14));
         resetButton.setBackground(new Color(158, 158, 158));
         resetButton.setForeground(Color.WHITE);
+        resetButton.setOpaque(true);
+        resetButton.setBorderPainted(false);
         resetButton.setFocusPainted(false);
+        resetButton.setPreferredSize(new Dimension(90, 35));
         resetButton.addActionListener(e -> {
             if (listener != null) {
                 listener.onReset();

@@ -133,11 +133,6 @@ public class FlowchartInterpreter {
             String style = cell.getStyle();
             String value = (String) cell.getValue();
 
-            // Notifica listener prima dell'esecuzione
-            if (listener != null) {
-                listener.onExecutionStep(currentCell, new HashMap<>(variables), output.toString());
-            }
-
             // Esegui il blocco in base al tipo
             if (FlowchartPanel.START.equals(style)) {
                 // Blocco Start - passa al prossimo
@@ -151,7 +146,10 @@ public class FlowchartInterpreter {
             } else if (FlowchartPanel.IO.equals(style)) {
                 // Blocco I/O - gestisci input o output
                 executeIO(value);
-                moveToNext(cell);
+                // NON moveToNext qui se siamo in pausa per l'input
+                if (!isPaused) {
+                    moveToNext(cell);
+                }
 
             } else if (FlowchartPanel.CONDITIONAL.equals(style)) {
                 // Blocco Conditional - valuta condizione
@@ -170,6 +168,12 @@ public class FlowchartInterpreter {
             } else {
                 // Tipo sconosciuto - passa al prossimo
                 moveToNext(cell);
+            }
+
+            // Notifica listener DOPO l'esecuzione per evidenziare blocco,
+            // aggiornare variabili e output insieme
+            if (listener != null && !isPaused) {
+                listener.onExecutionStep(currentCell, new HashMap<>(variables), output.toString());
             }
 
         } catch (Exception e) {
@@ -222,7 +226,9 @@ public class FlowchartInterpreter {
 
     private void requestInput(String varName) {
         // Richiedi input all'utente
+        boolean wasRunningAutomatically = !isPaused && isRunning;
         isPaused = true;
+
         if (listener != null) {
             listener.onInputRequired(varName, value -> {
                 try {
@@ -237,9 +243,16 @@ public class FlowchartInterpreter {
                 } catch (Exception e) {
                     variables.put(varName, value);
                 }
-                isPaused = false;
-                if (isRunning) {
+
+                // Riprendi solo se eravamo in esecuzione automatica,
+                // NON in modalità step-by-step
+                if (wasRunningAutomatically) {
+                    isPaused = false;
                     resume();
+                } else {
+                    // In step-by-step, l'input è stato fornito ma restiamo in pausa
+                    // fino al prossimo click su "Next Step"
+                    isPaused = false;
                 }
             });
         }
