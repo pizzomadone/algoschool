@@ -10,6 +10,8 @@ import com.mxgraph.view.mxStylesheet;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashMap;
@@ -30,6 +32,9 @@ public class FlowchartPanel extends JPanel {
     // Track Start and End cells
     private Object startCell;
     private Object endCell;
+
+    // Flag to track if initial layout has been applied
+    private boolean initialLayoutApplied = false;
 
     // Block type constants
     public static final String PROCESS = "PROCESS";
@@ -86,6 +91,31 @@ public class FlowchartPanel extends JPanel {
 
         // Setup mouse listeners for edge clicking
         setupMouseListeners();
+
+        // Add component listener to reapply layout when component is first shown
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentShown(ComponentEvent e) {
+                if (!initialLayoutApplied) {
+                    // Delay the layout application to ensure viewport has correct size
+                    SwingUtilities.invokeLater(() -> {
+                        applyHierarchicalLayout();
+                        initialLayoutApplied = true;
+                    });
+                }
+            }
+
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (!initialLayoutApplied && graphComponent.getViewport().getSize().width > 0) {
+                    // If resized before shown, apply layout
+                    SwingUtilities.invokeLater(() -> {
+                        applyHierarchicalLayout();
+                        initialLayoutApplied = true;
+                    });
+                }
+            }
+        });
 
         add(graphComponent, BorderLayout.CENTER);
 
