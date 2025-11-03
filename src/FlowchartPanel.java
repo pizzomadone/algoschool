@@ -242,8 +242,8 @@ public class FlowchartPanel extends JPanel {
         try {
             layout.execute(parent);
 
-            // Center the graph
-            graphComponent.zoomAndCenter();
+            // Sposta il flowchart a destra con offset fisso
+            graph.getView().setTranslate(new mxPoint(200, 50));
 
         } finally {
             graph.getModel().endUpdate();
