@@ -243,15 +243,19 @@ public class FlowchartPanel extends JPanel {
         try {
             layout.execute(parent);
 
-            // Calcola i bounds del grafico dopo il layout
-            mxRectangle graphBounds = graph.getGraphBounds();
+            // Ottieni la geometria del blocco Start per usarlo come punto di riferimento
+            mxCell startVertex = (mxCell) startCell;
+            mxGeometry startGeometry = startVertex.getGeometry();
+
+            // Calcola il centro X del blocco Start (dopo il layout)
+            double startCenterX = startGeometry.getX() + startGeometry.getWidth() / 2;
 
             // Ottieni le dimensioni della viewport
             Dimension viewportSize = graphComponent.getViewport().getSize();
 
-            // Calcola la traslazione per centrare orizzontalmente
-            // Se la viewport è più larga del grafico, centra; altrimenti usa un margine minimo
-            double translateX = Math.max(50, (viewportSize.width - graphBounds.getWidth()) / 2);
+            // Calcola la traslazione per centrare il blocco Start orizzontalmente nella viewport
+            double viewportCenterX = viewportSize.width / 2.0;
+            double translateX = viewportCenterX - startCenterX;
 
             // Offset dall'alto - leggermente distaccato dalla parte superiore
             double translateY = 80;
@@ -259,9 +263,12 @@ public class FlowchartPanel extends JPanel {
             // Applica la traslazione
             graph.getView().setTranslate(new mxPoint(translateX, translateY));
 
+            // Calcola i bounds del grafico per il ridimensionamento dinamico
+            mxRectangle graphBounds = graph.getGraphBounds();
+
             // Se il grafico è troppo grande, ridimensiona il graphComponent
             // per assicurarti che sia completamente visibile con scrollbar
-            double requiredWidth = graphBounds.getWidth() + 2 * Math.max(translateX, 50);
+            double requiredWidth = graphBounds.getWidth() + 2 * Math.abs(translateX) + 100;
             double requiredHeight = graphBounds.getHeight() + translateY + 100;
 
             // Imposta una dimensione preferita maggiore per permettere lo scroll
