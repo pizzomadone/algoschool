@@ -4,11 +4,14 @@ import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.util.mxPoint;
+import com.mxgraph.util.mxRectangle;
 import com.mxgraph.view.mxGraph;
 import com.mxgraph.view.mxStylesheet;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashMap;
@@ -29,6 +32,9 @@ public class FlowchartPanel extends JPanel {
     // Track Start and End cells
     private Object startCell;
     private Object endCell;
+
+    // Flag to track if initial layout has been applied
+    private boolean initialLayoutApplied = false;
 
     // Block type constants
     public static final String PROCESS = "PROCESS";
@@ -85,6 +91,31 @@ public class FlowchartPanel extends JPanel {
 
         // Setup mouse listeners for edge clicking
         setupMouseListeners();
+
+        // Add component listener to reapply layout when component is first shown
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentShown(ComponentEvent e) {
+                if (!initialLayoutApplied) {
+                    // Delay the layout application to ensure viewport has correct size
+                    SwingUtilities.invokeLater(() -> {
+                        applyHierarchicalLayout();
+                        initialLayoutApplied = true;
+                    });
+                }
+            }
+
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (!initialLayoutApplied && graphComponent.getViewport().getSize().width > 0) {
+                    // If resized before shown, apply layout
+                    SwingUtilities.invokeLater(() -> {
+                        applyHierarchicalLayout();
+                        initialLayoutApplied = true;
+                    });
+                }
+            }
+        });
 
         add(graphComponent, BorderLayout.CENTER);
 
@@ -242,8 +273,44 @@ public class FlowchartPanel extends JPanel {
         try {
             layout.execute(parent);
 
-            // Sposta il flowchart a destra con offset fisso
-            graph.getView().setTranslate(new mxPoint(200, 50));
+            // Ottieni la geometria del blocco Start per usarlo come punto di riferimento
+            mxCell startVertex = (mxCell) startCell;
+            mxGeometry startGeometry = startVertex.getGeometry();
+
+            // Calcola il centro X del blocco Start (dopo il layout)
+            double startCenterX = startGeometry.getX() + startGeometry.getWidth() / 2;
+
+            // Ottieni le dimensioni della viewport
+            Dimension viewportSize = graphComponent.getViewport().getSize();
+
+            // Calcola la traslazione per centrare il blocco Start orizzontalmente nella viewport
+            double viewportCenterX = viewportSize.width / 2.0;
+            double translateX = viewportCenterX - startCenterX;
+
+            // Offset dall'alto - leggermente distaccato dalla parte superiore
+            double translateY = 80;
+
+            // Applica la traslazione
+            graph.getView().setTranslate(new mxPoint(translateX, translateY));
+
+            // Calcola i bounds del grafico per il ridimensionamento dinamico
+            mxRectangle graphBounds = graph.getGraphBounds();
+
+            // Se il grafico è troppo grande, ridimensiona il graphComponent
+            // per assicurarti che sia completamente visibile con scrollbar
+            double requiredWidth = graphBounds.getWidth() + 2 * Math.abs(translateX) + 100;
+            double requiredHeight = graphBounds.getHeight() + translateY + 100;
+
+            // Imposta una dimensione preferita maggiore per permettere lo scroll
+            Dimension currentPrefSize = graphComponent.getPreferredSize();
+            Dimension newPrefSize = new Dimension(
+                (int) Math.max(requiredWidth, currentPrefSize.width),
+                (int) Math.max(requiredHeight, currentPrefSize.height)
+            );
+
+            graphComponent.setPreferredSize(newPrefSize);
+            graphComponent.setMinimumSize(new Dimension((int) requiredWidth, (int) requiredHeight));
+            graphComponent.revalidate();
 
         } finally {
             graph.getModel().endUpdate();
