@@ -71,8 +71,7 @@ public class FlowchartEditorApp extends JFrame {
         mainSplitPane.setDividerLocation(900);
         mainSplitPane.setResizeWeight(0.7);
 
-        // Layout
-        add(controlPanel, BorderLayout.NORTH);
+        // Layout - DON'T add controlPanel here yet, will be added in setupToolbar()
         add(mainSplitPane, BorderLayout.CENTER);
 
         // Status bar
@@ -368,7 +367,12 @@ public class FlowchartEditorApp extends JFrame {
         infoLabel.setForeground(new Color(0, 100, 0));
         toolBar.add(infoLabel);
 
-        add(toolBar, BorderLayout.NORTH);
+        // Create a panel to hold both toolbar and execution controls
+        JPanel northPanel = new JPanel(new BorderLayout());
+        northPanel.add(toolBar, BorderLayout.NORTH);
+        northPanel.add(controlPanel, BorderLayout.CENTER);
+
+        add(northPanel, BorderLayout.NORTH);
     }
 
     private JPanel createStatusBar() {
