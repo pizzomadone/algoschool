@@ -4,6 +4,7 @@ import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.util.mxPoint;
+import com.mxgraph.util.mxRectangle;
 import com.mxgraph.view.mxGraph;
 import com.mxgraph.view.mxStylesheet;
 
@@ -242,8 +243,37 @@ public class FlowchartPanel extends JPanel {
         try {
             layout.execute(parent);
 
-            // Sposta il flowchart a destra con offset fisso
-            graph.getView().setTranslate(new mxPoint(200, 50));
+            // Calcola i bounds del grafico dopo il layout
+            mxRectangle graphBounds = graph.getGraphBounds();
+
+            // Ottieni le dimensioni della viewport
+            Dimension viewportSize = graphComponent.getViewport().getSize();
+
+            // Calcola la traslazione per centrare orizzontalmente
+            // Se la viewport è più larga del grafico, centra; altrimenti usa un margine minimo
+            double translateX = Math.max(50, (viewportSize.width - graphBounds.getWidth()) / 2);
+
+            // Offset dall'alto - leggermente distaccato dalla parte superiore
+            double translateY = 80;
+
+            // Applica la traslazione
+            graph.getView().setTranslate(new mxPoint(translateX, translateY));
+
+            // Se il grafico è troppo grande, ridimensiona il graphComponent
+            // per assicurarti che sia completamente visibile con scrollbar
+            double requiredWidth = graphBounds.getWidth() + 2 * Math.max(translateX, 50);
+            double requiredHeight = graphBounds.getHeight() + translateY + 100;
+
+            // Imposta una dimensione preferita maggiore per permettere lo scroll
+            Dimension currentPrefSize = graphComponent.getPreferredSize();
+            Dimension newPrefSize = new Dimension(
+                (int) Math.max(requiredWidth, currentPrefSize.width),
+                (int) Math.max(requiredHeight, currentPrefSize.height)
+            );
+
+            graphComponent.setPreferredSize(newPrefSize);
+            graphComponent.setMinimumSize(new Dimension((int) requiredWidth, (int) requiredHeight));
+            graphComponent.revalidate();
 
         } finally {
             graph.getModel().endUpdate();
