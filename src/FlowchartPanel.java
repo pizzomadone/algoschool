@@ -265,7 +265,7 @@ public class FlowchartPanel extends JPanel {
     private void applyHierarchicalLayout() {
         mxHierarchicalLayout layout = new mxHierarchicalLayout(graph);
         layout.setInterHierarchySpacing(50);
-        layout.setInterRankCellSpacing(80);
+        layout.setInterRankCellSpacing(40);  // Dimezzato da 80 a 40 per archi più corti
         layout.setOrientation(SwingConstants.NORTH);
 
         Object parent = graph.getDefaultParent();
@@ -287,8 +287,8 @@ public class FlowchartPanel extends JPanel {
             double viewportCenterX = viewportSize.width / 2.0;
             double translateX = viewportCenterX - startCenterX;
 
-            // Offset dall'alto - leggermente distaccato dalla parte superiore
-            double translateY = 80;
+            // Offset dall'alto - Start vicino al bordo superiore (10px di margine)
+            double translateY = 10;
 
             // Applica la traslazione
             graph.getView().setTranslate(new mxPoint(translateX, translateY));
