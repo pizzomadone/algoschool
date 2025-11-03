@@ -133,6 +133,9 @@ public class FlowchartInterpreter {
             String style = cell.getStyle();
             String value = (String) cell.getValue();
 
+            // IMPORTANTE: Salva il blocco che stiamo per eseguire
+            Object executingCell = currentCell;
+
             // Esegui il blocco in base al tipo
             if (FlowchartPanel.START.equals(style)) {
                 // Blocco Start - passa al prossimo
@@ -145,8 +148,10 @@ public class FlowchartInterpreter {
 
             } else if (FlowchartPanel.IO.equals(style)) {
                 // Blocco I/O - gestisci input o output
+                boolean wasInput = value != null && value.toLowerCase().contains("input");
                 executeIO(value);
-                // NON moveToNext qui se siamo in pausa per l'input
+                // moveToNext viene chiamato in completeInputAndAdvance dopo l'input
+                // o subito se era output
                 if (!isPaused) {
                     moveToNext(cell);
                 }
@@ -170,10 +175,10 @@ public class FlowchartInterpreter {
                 moveToNext(cell);
             }
 
-            // Notifica listener DOPO l'esecuzione per evidenziare blocco,
-            // aggiornare variabili e output insieme
+            // Notifica listener DOPO l'esecuzione con il blocco che abbiamo appena eseguito
+            // Ora variabili e output sono già aggiornati dall'esecuzione
             if (listener != null && !isPaused) {
-                listener.onExecutionStep(currentCell, new HashMap<>(variables), output.toString());
+                listener.onExecutionStep(executingCell, new HashMap<>(variables), output.toString());
             }
 
         } catch (Exception e) {
@@ -227,6 +232,11 @@ public class FlowchartInterpreter {
     private void requestInput(String varName) {
         // Richiedi input all'utente
         boolean wasRunningAutomatically = !isPaused && isRunning;
+
+        // Salva il cell corrente per poterlo avanzare dopo l'input
+        Object cellToAdvance = currentCell;
+
+        // IMPORTANTE: Metti in pausa PRIMA di richiedere l'input
         isPaused = true;
 
         if (listener != null) {
@@ -244,16 +254,23 @@ public class FlowchartInterpreter {
                     variables.put(varName, value);
                 }
 
-                // Riprendi solo se eravamo in esecuzione automatica,
-                // NON in modalità step-by-step
-                if (wasRunningAutomatically) {
-                    isPaused = false;
-                    resume();
-                } else {
-                    // In step-by-step, l'input è stato fornito ma restiamo in pausa
-                    // fino al prossimo click su "Next Step"
-                    isPaused = false;
+                // IMPORTANTE: Avanza al blocco successivo dopo aver ricevuto l'input
+                moveToNext((mxCell) cellToAdvance);
+
+                // Notifica il listener con le variabili aggiornate
+                if (listener != null) {
+                    listener.onExecutionStep(cellToAdvance, new HashMap<>(variables), output.toString());
                 }
+
+                // Togliamo la pausa dopo l'input
+                isPaused = false;
+
+                // Riprendi solo se eravamo in esecuzione automatica
+                if (wasRunningAutomatically) {
+                    resume();
+                }
+                // Se siamo in step-by-step, l'esecuzione è completa per questo step
+                // il prossimo click su "Next Step" continuerà dal blocco successivo
             });
         }
     }
