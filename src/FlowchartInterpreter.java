@@ -320,6 +320,33 @@ public class FlowchartInterpreter {
             // Rimuovi il punto interrogativo se presente
             condition = condition.replaceAll("\\?", "").trim();
 
+            // Gestisci operatori logici AND (&&, AND, &)
+            if (condition.matches(".*\\s+(AND|&&|&)\\s+.*")) {
+                String[] parts = condition.split("\\s+(AND|&&|&)\\s+", 2);
+                if (parts.length == 2) {
+                    return evaluateCondition(parts[0].trim()) && evaluateCondition(parts[1].trim());
+                }
+            }
+
+            // Gestisci operatori logici OR (||, OR, |)
+            if (condition.matches(".*\\s+(OR|\\|\\||\\|)\\s+.*")) {
+                String[] parts = condition.split("\\s+(OR|\\|\\||\\|)\\s+", 2);
+                if (parts.length == 2) {
+                    return evaluateCondition(parts[0].trim()) || evaluateCondition(parts[1].trim());
+                }
+            }
+
+            // Gestisci operatore logico NOT (!, NOT)
+            if (condition.matches("^(NOT|!)\\s+.*")) {
+                String subCondition = condition.replaceFirst("^(NOT|!)\\s+", "").trim();
+                return !evaluateCondition(subCondition);
+            }
+
+            // Gestisci parentesi per raggruppamento
+            if (condition.startsWith("(") && condition.endsWith(")")) {
+                return evaluateCondition(condition.substring(1, condition.length() - 1).trim());
+            }
+
             // Pattern per condizioni semplici: var op value
             Pattern pattern = Pattern.compile("(.+?)\\s*([<>=!]+)\\s*(.+)");
             Matcher matcher = pattern.matcher(condition);
@@ -342,7 +369,7 @@ public class FlowchartInterpreter {
 
         } catch (Exception e) {
             if (listener != null) {
-                listener.onExecutionError("Errore nella valutazione della condizione: " + condition);
+                listener.onExecutionError("Errore nella valutazione della condizione: " + condition + " - " + e.getMessage());
             }
         }
 

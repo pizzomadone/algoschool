@@ -421,12 +421,17 @@ public class FlowchartPanel extends JPanel {
             Object targetEdge = null;
             Object source = null;
             Object target = null;
+            String originalLabel = "";
+            String originalStyle = null;
 
             for (Object edge : edges) {
                 mxCell edgeCell = (mxCell) edge;
                 if (edgeCell.getTarget() == cell) {
                     sourceEdge = edge;
                     source = edgeCell.getSource();
+                    // IMPORTANTE: Salva l'etichetta e lo stile dell'edge in ingresso
+                    originalLabel = (String) edgeCell.getValue();
+                    originalStyle = edgeCell.getStyle();
                 } else if (edgeCell.getSource() == cell) {
                     targetEdge = edge;
                     target = edgeCell.getTarget();
@@ -437,8 +442,10 @@ public class FlowchartPanel extends JPanel {
             graph.removeCells(new Object[]{cell});
 
             // Reconnect if we have both source and target
+            // IMPORTANTE: Preserva l'etichetta e lo stile dell'edge originale
             if (source != null && target != null) {
-                graph.insertEdge(graph.getDefaultParent(), null, "", source, target);
+                if (originalLabel == null) originalLabel = "";
+                graph.insertEdge(graph.getDefaultParent(), null, originalLabel, source, target, originalStyle);
             }
 
             // Re-layout
@@ -491,6 +498,10 @@ public class FlowchartPanel extends JPanel {
             Object source = edgeCell.getSource();
             Object target = edgeCell.getTarget();
             Object parent = graph.getDefaultParent();
+
+            // IMPORTANTE: Salva l'etichetta e lo stile dell'edge originale
+            String originalLabel = (String) edgeCell.getValue();
+            String originalStyle = edgeCell.getStyle();
 
             // Remove the original edge
             graph.removeCells(new Object[]{edge});
@@ -575,7 +586,9 @@ public class FlowchartPanel extends JPanel {
                     0, 0, width, height, blockType);
 
                 // Reconnect: source -> newBlock -> target
-                graph.insertEdge(parent, null, "", source, newBlock);
+                // IMPORTANTE: Preserva l'etichetta e lo stile dell'edge originale sulla prima freccia
+                if (originalLabel == null) originalLabel = "";
+                graph.insertEdge(parent, null, originalLabel, source, newBlock, originalStyle);
                 graph.insertEdge(parent, null, "", newBlock, target);
             }
 
