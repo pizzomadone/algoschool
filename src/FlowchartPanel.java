@@ -538,33 +538,38 @@ public class FlowchartPanel extends JPanel {
             } else if (LOOP.equals(blockType)) {
                 // Special handling for loop blocks
                 String loopText = JOptionPane.showInputDialog(this,
-                    "Enter loop condition:", "Loop condition?");
+                    "Inserisci la condizione del ciclo:", "Condizione del ciclo");
                 if (loopText == null || loopText.trim().isEmpty()) {
-                    loopText = "Loop condition?";
+                    loopText = "condizione?";
                 }
 
                 // Create the loop block
                 Object loopBlock = graph.insertVertex(parent, null, loopText,
                     0, 0, 120, 70, LOOP);
 
-                // Create merge point after loop
-                Object mergePoint = graph.insertVertex(parent, null, "",
+                // Create merge point for loop body entry (where users can insert blocks)
+                Object bodyMergePoint = graph.insertVertex(parent, null, "",
                     0, 0, 15, 15, MERGE);
 
-                // Connect source to loop
+                // Create merge point for loop exit
+                Object exitMergePoint = graph.insertVertex(parent, null, "",
+                    0, 0, 15, 15, MERGE);
+
+                // Connect source to loop condition
                 graph.insertEdge(parent, null, "", source, loopBlock);
 
-                // Create loop body
-                Object loopBody = graph.insertVertex(parent, null, "Loop body",
-                    0, 0, 140, 60, ASSIGNMENT);
-                graph.insertEdge(parent, null, "Yes", loopBlock, loopBody, "TRUE_BRANCH");
+                // Yes branch: enter loop body (GREEN arrow)
+                graph.insertEdge(parent, null, "Yes", loopBlock, bodyMergePoint, "TRUE_BRANCH");
 
-                // Loop back from body to loop condition
-                graph.insertEdge(parent, null, "", loopBody, loopBlock);
+                // Loop back: from body merge point to loop condition
+                // (users can insert blocks on the edge between bodyMergePoint and loopBlock)
+                graph.insertEdge(parent, null, "", bodyMergePoint, loopBlock);
 
-                // Exit loop
-                graph.insertEdge(parent, null, "No", loopBlock, mergePoint, "FALSE_BRANCH");
-                graph.insertEdge(parent, null, "", mergePoint, target);
+                // No branch: exit loop (RED arrow)
+                graph.insertEdge(parent, null, "No", loopBlock, exitMergePoint, "FALSE_BRANCH");
+
+                // Continue after loop
+                graph.insertEdge(parent, null, "", exitMergePoint, target);
 
             } else {
                 // Regular blocks (Assignment, Input, Output)
@@ -734,28 +739,36 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
+            // Input: ask for n
             Object input = graph.insertVertex(parent, null, "n", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", start, input);
 
+            // Initialize counter
             Object init = graph.insertVertex(parent, null, "i = 0", 0, 0, 140, 60, ASSIGNMENT);
             graph.insertEdge(parent, null, "", input, init);
 
+            // Loop condition
             Object loop = graph.insertVertex(parent, null, "i < n?", 0, 0, 120, 70, LOOP);
             graph.insertEdge(parent, null, "", init, loop);
 
-            Object mergePoint = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
-
+            // Output current i value
             Object outputI = graph.insertVertex(parent, null, "i", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "Yes", loop, outputI, "TRUE_BRANCH");
 
-            Object loopBody = graph.insertVertex(parent, null, "i = i + 1", 0, 0, 140, 60, ASSIGNMENT);
-            graph.insertEdge(parent, null, "", outputI, loopBody);
+            // Increment i
+            Object increment = graph.insertVertex(parent, null, "i = i + 1", 0, 0, 140, 60, ASSIGNMENT);
+            graph.insertEdge(parent, null, "", outputI, increment);
 
-            graph.insertEdge(parent, null, "", loopBody, loop); // Loop back
-            graph.insertEdge(parent, null, "No", loop, mergePoint, "FALSE_BRANCH");
+            // Loop back to condition
+            graph.insertEdge(parent, null, "", increment, loop);
 
+            // Exit merge point
+            Object exitMergePoint = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
+            graph.insertEdge(parent, null, "No", loop, exitMergePoint, "FALSE_BRANCH");
+
+            // Done message
             Object output = graph.insertVertex(parent, null, "\"Done\"", 0, 0, 140, 70, OUTPUT);
-            graph.insertEdge(parent, null, "", mergePoint, output);
+            graph.insertEdge(parent, null, "", exitMergePoint, output);
             graph.insertEdge(parent, null, "", output, end);
 
             applyHierarchicalLayout();
