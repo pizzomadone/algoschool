@@ -177,15 +177,73 @@ public class FlowchartInterpreter {
 
             } else if (FlowchartPanel.CONDITIONAL.equals(style)) {
                 // Blocco Conditional - valuta condizione
+                output.append("▶ IF: Evaluating condition '").append(value).append("'\n");
                 boolean result = evaluateCondition(value);
+                output.append("  → Condition is ").append(result ? "TRUE" : "FALSE");
+                output.append(result ? " (taking YES branch)\n" : " (taking NO branch)\n");
                 moveToConditionalBranch(cell, result);
 
             } else if (FlowchartPanel.LOOP.equals(style)) {
                 // Blocco Loop - valuta condizione loop
                 System.out.println("\n▶ Executing LOOP block: " + value);
                 System.out.println("Current variables: " + variables);
+                output.append("▶ WHILE LOOP: Evaluating condition '").append(value).append("'\n");
                 boolean result = evaluateCondition(value);
                 System.out.println("Condition result: " + result);
+                output.append("  → Condition is ").append(result ? "TRUE" : "FALSE");
+                output.append(result ? " (entering loop body)\n" : " (exiting loop)\n");
+                moveToLoopBranch(cell, result);
+
+            } else if (FlowchartPanel.FOR_LOOP.equals(style)) {
+                // Blocco For Loop - formato: init; condition; increment
+                System.out.println("\n▶ Executing FOR LOOP block: " + value);
+                System.out.println("Current variables: " + variables);
+                output.append("▶ FOR LOOP: Processing '").append(value).append("'\n");
+
+                // Parse the for loop: init; condition; increment
+                String[] parts = value.split(";");
+                if (parts.length == 3) {
+                    String init = parts[0].trim();
+                    String condition = parts[1].trim();
+                    String increment = parts[2].trim();
+
+                    // Check if this is the first time we enter the for loop
+                    if (loopStack.isEmpty() || loopStack.peek().loopCell != cell) {
+                        // First entry: execute initialization
+                        output.append("  → Initialization: ").append(init).append("\n");
+                        executeAssignment(init);
+                        output.append("  → Evaluating condition: ").append(condition).append("\n");
+                        boolean result = evaluateCondition(condition);
+                        output.append("  → Condition is ").append(result ? "TRUE" : "FALSE");
+                        output.append(result ? " (entering loop body)\n" : " (exiting loop)\n");
+                        moveToLoopBranch(cell, result);
+                    } else {
+                        // Re-entering: execute increment, then check condition
+                        output.append("  → Increment: ").append(increment).append("\n");
+                        executeAssignment(increment);
+                        output.append("  → Evaluating condition: ").append(condition).append("\n");
+                        boolean result = evaluateCondition(condition);
+                        output.append("  → Condition is ").append(result ? "TRUE" : "FALSE");
+                        output.append(result ? " (continuing loop)\n" : " (exiting loop)\n");
+                        moveToLoopBranch(cell, result);
+                    }
+                } else {
+                    // Malformed for loop - treat as simple condition
+                    boolean result = evaluateCondition(value);
+                    output.append("  → Condition is ").append(result ? "TRUE" : "FALSE");
+                    output.append(result ? " (entering loop body)\n" : " (exiting loop)\n");
+                    moveToLoopBranch(cell, result);
+                }
+
+            } else if (FlowchartPanel.DO_WHILE.equals(style)) {
+                // Blocco Do-While - valuta condizione dopo il corpo
+                System.out.println("\n▶ Executing DO-WHILE block: " + value);
+                System.out.println("Current variables: " + variables);
+                output.append("▶ DO-WHILE: Evaluating condition '").append(value).append("'\n");
+                boolean result = evaluateCondition(value);
+                System.out.println("Condition result: " + result);
+                output.append("  → Condition is ").append(result ? "TRUE" : "FALSE");
+                output.append(result ? " (repeating loop body)\n" : " (exiting loop)\n");
                 moveToLoopBranch(cell, result);
 
             } else if (FlowchartPanel.MERGE.equals(style)) {
@@ -217,8 +275,10 @@ public class FlowchartInterpreter {
             String varName = matcher.group(1).trim();
             String expression = matcher.group(2).trim();
 
+            output.append("▶ ASSIGNMENT: Evaluating '").append(expression).append("'\n");
             Object result = evaluateExpression(expression);
             variables.put(varName, result);
+            output.append("  → Variable '").append(varName).append("' = ").append(result).append("\n");
         } else {
             // Se non è un assegnamento, prova a valutare come espressione
             evaluateExpression(instruction);
@@ -246,6 +306,7 @@ public class FlowchartInterpreter {
         for (String varName : vars) {
             varName = varName.trim();
             if (!varName.isEmpty()) {
+                output.append("▶ INPUT: Requesting value for variable '").append(varName).append("'\n");
                 requestInput(varName);
             }
         }
@@ -269,6 +330,7 @@ public class FlowchartInterpreter {
         // Valuta l'espressione
         // Se è una stringa tra virgolette, evaluateExpression la restituirà senza virgolette
         // Se è una variabile o un'espressione, la valuterà
+        output.append("▶ OUTPUT: ");
         Object result = evaluateExpression(expression);
         output.append(result).append("\n");
     }
@@ -288,13 +350,17 @@ public class FlowchartInterpreter {
                     // Prova a convertire in numero
                     if (value.matches("-?\\d+")) {
                         variables.put(varName, Integer.parseInt(value));
+                        output.append("  → User entered: ").append(value).append(" (stored as Integer)\n");
                     } else if (value.matches("-?\\d+\\.\\d+")) {
                         variables.put(varName, Double.parseDouble(value));
+                        output.append("  → User entered: ").append(value).append(" (stored as Double)\n");
                     } else {
                         variables.put(varName, value);
+                        output.append("  → User entered: \"").append(value).append("\" (stored as String)\n");
                     }
                 } catch (Exception e) {
                     variables.put(varName, value);
+                    output.append("  → User entered: \"").append(value).append("\"\n");
                 }
 
                 // IMPORTANTE: Avanza al blocco successivo dopo aver ricevuto l'input
