@@ -182,7 +182,10 @@ public class FlowchartInterpreter {
 
             } else if (FlowchartPanel.LOOP.equals(style)) {
                 // Blocco Loop - valuta condizione loop
+                System.out.println("\n▶ Executing LOOP block: " + value);
+                System.out.println("Current variables: " + variables);
                 boolean result = evaluateCondition(value);
+                System.out.println("Condition result: " + result);
                 moveToLoopBranch(cell, result);
 
             } else if (FlowchartPanel.MERGE.equals(style)) {
@@ -528,47 +531,86 @@ public class FlowchartInterpreter {
     }
 
     private void moveToLoopBranch(mxCell cell, boolean condition) {
+        Object[] edges = graph.getOutgoingEdges(cell);
+
+        // Debug: stampa info sugli archi
+        System.out.println("\n=== DEBUG LOOP BRANCH ===");
+        System.out.println("Loop cell: " + cell.getValue());
+        System.out.println("Condition evaluated to: " + condition);
+        System.out.println("Number of outgoing edges: " + edges.length);
+
+        for (int i = 0; i < edges.length; i++) {
+            mxCell edgeCell = (mxCell) edges[i];
+            String style = edgeCell.getStyle();
+            String label = (String) edgeCell.getValue();
+            Object target = edgeCell.getTarget();
+            String targetValue = target != null ? String.valueOf(((mxCell)target).getValue()) : "null";
+
+            System.out.println("Edge " + i + ":");
+            System.out.println("  Label: " + label);
+            System.out.println("  Style: " + style);
+            System.out.println("  Target: " + targetValue);
+        }
+
         if (condition) {
-            // Entra nel corpo del loop
-            Object[] edges = graph.getOutgoingEdges(cell);
+            // Entra nel corpo del loop - cerca TRUE_BRANCH
             for (Object edge : edges) {
                 mxCell edgeCell = (mxCell) edge;
                 String style = edgeCell.getStyle();
+                String label = (String) edgeCell.getValue();
 
-                if ("TRUE_BRANCH".equals(style)) {
+                // Controlla sia lo stile che l'etichetta per maggiore robustezza
+                boolean isTrueBranch = (style != null && style.contains("TRUE_BRANCH")) ||
+                                      (label != null && (label.equals("Yes") || label.equals("Sì") || label.equals("Si")));
+
+                if (isTrueBranch) {
+                    System.out.println("→ Following TRUE branch to: " + ((mxCell)edgeCell.getTarget()).getValue());
+
                     // Salva il contesto del loop
                     if (loopStack.isEmpty() || loopStack.peek().loopCell != cell) {
                         loopStack.push(new LoopContext(cell, edgeCell.getTarget()));
+                        System.out.println("→ Pushed loop context to stack");
                     }
                     currentCell = edgeCell.getTarget();
                     return;
                 }
             }
+            System.out.println("⚠ WARNING: TRUE branch not found! Using fallback.");
         } else {
-            // Esci dal loop
+            // Esci dal loop - cerca FALSE_BRANCH
             if (!loopStack.isEmpty() && loopStack.peek().loopCell == cell) {
                 loopStack.pop();
+                System.out.println("→ Popped loop context from stack");
             }
 
-            Object[] edges = graph.getOutgoingEdges(cell);
             for (Object edge : edges) {
                 mxCell edgeCell = (mxCell) edge;
                 String style = edgeCell.getStyle();
+                String label = (String) edgeCell.getValue();
 
-                if ("FALSE_BRANCH".equals(style)) {
+                // Controlla sia lo stile che l'etichetta per maggiore robustezza
+                boolean isFalseBranch = (style != null && style.contains("FALSE_BRANCH")) ||
+                                       (label != null && label.equals("No"));
+
+                if (isFalseBranch) {
+                    System.out.println("→ Following FALSE branch to: " + ((mxCell)edgeCell.getTarget()).getValue());
                     currentCell = edgeCell.getTarget();
                     return;
                 }
             }
+            System.out.println("⚠ WARNING: FALSE branch not found! Using fallback.");
         }
 
-        // Fallback
-        Object[] edges = graph.getOutgoingEdges(cell);
+        // Fallback: prendi il primo edge disponibile
+        System.out.println("→ Using fallback: taking first edge");
         if (edges.length > 0) {
             currentCell = ((mxCell) edges[0]).getTarget();
+            System.out.println("→ Fallback target: " + ((mxCell)currentCell).getValue());
         } else {
             currentCell = null;
+            System.out.println("→ No edges available!");
         }
+        System.out.println("=========================\n");
     }
 
     public Map<String, Object> getVariables() {
