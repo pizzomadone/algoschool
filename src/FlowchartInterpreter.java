@@ -19,6 +19,7 @@ public class FlowchartInterpreter {
     private Object endCell;
     private boolean isRunning;
     private boolean isPaused;
+    private boolean isSteppingMode;  // Aggiunto per tracciare la modalità step-by-step
     private ExecutionListener listener;
 
     // Stack per gestire i loop
@@ -72,11 +73,13 @@ public class FlowchartInterpreter {
         currentCell = startCell;
         isRunning = false;
         isPaused = false;
+        isSteppingMode = false;
     }
 
     public void start() {
         reset();
         isRunning = true;
+        isSteppingMode = false;  // Esecuzione automatica
         currentCell = startCell;
         executeAll();
     }
@@ -85,6 +88,7 @@ public class FlowchartInterpreter {
         if (!isRunning) {
             reset();
             isRunning = true;
+            isSteppingMode = true;  // Modalità step-by-step
             currentCell = startCell;
         }
 
@@ -109,6 +113,7 @@ public class FlowchartInterpreter {
 
     public void resume() {
         isPaused = false;
+        isSteppingMode = false;  // Quando si riprende, si passa a esecuzione automatica
         executeAll();
     }
 
@@ -241,7 +246,6 @@ public class FlowchartInterpreter {
 
     private void requestInput(String varName) {
         // Richiedi input all'utente
-        boolean wasRunningAutomatically = !isPaused && isRunning;
 
         // Salva il cell corrente per poterlo avanzare dopo l'input
         Object cellToAdvance = currentCell;
@@ -275,8 +279,8 @@ public class FlowchartInterpreter {
                 // Togliamo la pausa dopo l'input
                 isPaused = false;
 
-                // Riprendi solo se eravamo in esecuzione automatica
-                if (wasRunningAutomatically) {
+                // Riprendi solo se NON siamo in modalità step-by-step
+                if (!isSteppingMode) {
                     resume();
                 }
                 // Se siamo in step-by-step, l'esecuzione è completa per questo step
