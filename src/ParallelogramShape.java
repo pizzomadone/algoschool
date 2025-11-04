@@ -56,5 +56,56 @@ public class ParallelogramShape extends mxBasicShape {
 
             g2.draw(path);
         }
+
+        // Determina se è Input o Output dal nome dello stile
+        String style = null;
+        Object baseStyleObj = state.getStyle().get("baseStyleName");
+        if (baseStyleObj instanceof String) {
+            style = (String) baseStyleObj;
+        }
+
+        if (style == null) {
+            // Prova a determinare dallo stile completo della cella
+            Object cellObj = state.getCell();
+            if (cellObj instanceof com.mxgraph.model.mxCell) {
+                com.mxgraph.model.mxCell cell = (com.mxgraph.model.mxCell) cellObj;
+                style = cell.getStyle();
+            }
+        }
+
+        // Disegna "I:" o "O:" in grassetto a sinistra del parallelogramma
+        String label = null;
+        if (style != null) {
+            if (style.contains("INPUT")) {
+                label = "I:";
+            } else if (style.contains("OUTPUT")) {
+                label = "O:";
+            }
+        }
+
+        if (label != null) {
+            // Salva il font originale
+            Font originalFont = g2.getFont();
+
+            // Imposta font grassetto
+            Font boldFont = originalFont.deriveFont(Font.BOLD, 14f);
+            g2.setFont(boldFont);
+
+            // Calcola dimensioni del testo
+            FontMetrics fm = g2.getFontMetrics();
+            int textWidth = fm.stringWidth(label);
+            int textHeight = fm.getHeight();
+
+            // Posiziona il testo a sinistra del parallelogramma
+            int textX = x - textWidth - 8;  // 8 pixel di padding
+            int textY = y + (h + textHeight) / 2 - fm.getDescent();
+
+            // Disegna il testo in nero
+            g2.setColor(Color.BLACK);
+            g2.drawString(label, textX, textY);
+
+            // Ripristina il font originale
+            g2.setFont(originalFont);
+        }
     }
 }

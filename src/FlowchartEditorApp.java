@@ -90,11 +90,14 @@ public class FlowchartEditorApp extends JFrame {
                     outputPanel.setOutput(output);
                 });
 
-                // Add delay for visualization
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                // Add delay for visualization only in automatic mode
+                // In step-by-step mode, the user controls the pace
+                if (!interpreter.isPaused() && interpreter.isRunning()) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
 

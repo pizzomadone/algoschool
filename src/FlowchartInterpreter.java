@@ -19,7 +19,8 @@ public class FlowchartInterpreter {
     private Object endCell;
     private boolean isRunning;
     private boolean isPaused;
-    private boolean isSteppingMode;  // Aggiunto per tracciare la modalità step-by-step
+    private volatile boolean isSteppingMode;  // Aggiunto per tracciare la modalità step-by-step (volatile per thread-safety)
+    private volatile boolean isExecutingStep;  // Flag per prevenire esecuzioni multiple simultanee
     private ExecutionListener listener;
 
     // Stack per gestire i loop
@@ -74,6 +75,7 @@ public class FlowchartInterpreter {
         isRunning = false;
         isPaused = false;
         isSteppingMode = false;
+        isExecutingStep = false;
     }
 
     public void start() {
@@ -84,18 +86,29 @@ public class FlowchartInterpreter {
         executeAll();
     }
 
-    public void step() {
-        if (!isRunning) {
-            reset();
-            isRunning = true;
-            isSteppingMode = true;  // Modalità step-by-step
-            currentCell = startCell;
+    public synchronized void step() {
+        // Previeni esecuzioni multiple simultanee
+        if (isExecutingStep) {
+            return;
         }
 
-        if (currentCell != null && currentCell != endCell) {
-            executeStep();
-        } else {
-            stop();
+        isExecutingStep = true;
+
+        try {
+            if (!isRunning) {
+                reset();
+                isRunning = true;
+                isSteppingMode = true;  // Modalità step-by-step
+                currentCell = startCell;
+            }
+
+            if (currentCell != null && currentCell != endCell) {
+                executeStep();
+            } else {
+                stop();
+            }
+        } finally {
+            isExecutingStep = false;
         }
     }
 
@@ -210,38 +223,51 @@ public class FlowchartInterpreter {
     }
 
     private void executeInput(String instruction) {
+        // Con il nuovo formato, il testo contiene solo i nomi delle variabili
+        // (senza "I:" perché ora è visualizzato fuori dal blocco)
+        instruction = instruction.trim();
+
+        // Rimuovi eventuali prefissi "I:" o "Input:" se presenti (per compatibilità)
         Matcher inputMatcher = INPUT_PATTERN.matcher(instruction);
+        String varNames;
 
         if (inputMatcher.find()) {
-            // Input - rimuovi il prefisso "I:" o "Input:" e ottieni i nomi delle variabili
-            String varNames = inputMatcher.group(1).trim();
-            String[] vars = varNames.split(",");
+            varNames = inputMatcher.group(1).trim();
+        } else {
+            varNames = instruction.replaceAll("(?i)^I\\s*:\\s*", "").trim();
+        }
 
-            for (String varName : vars) {
-                varName = varName.trim();
+        // Gestisci multiple variabili separate da virgola
+        String[] vars = varNames.split(",");
+
+        for (String varName : vars) {
+            varName = varName.trim();
+            if (!varName.isEmpty()) {
                 requestInput(varName);
             }
-        } else {
-            // Fallback: assume che l'intera stringa sia un nome di variabile
-            String varName = instruction.replaceAll("(?i)^I\\s*:\\s*", "").trim();
-            requestInput(varName);
         }
     }
 
     private void executeOutput(String instruction) {
+        // Con il nuovo formato, il testo contiene solo l'espressione o stringa
+        // (senza "O:" perché ora è visualizzato fuori dal blocco)
+        instruction = instruction.trim();
+
+        // Rimuovi eventuali prefissi "O:" o "Output:" se presenti (per compatibilità)
         Matcher outputMatcher = OUTPUT_PATTERN.matcher(instruction);
+        String expression;
 
         if (outputMatcher.find()) {
-            // Output - rimuovi il prefisso "O:" o "Output:" e valuta l'espressione
-            String expression = outputMatcher.group(1).trim();
-            Object result = evaluateExpression(expression);
-            output.append(result).append("\n");
+            expression = outputMatcher.group(1).trim();
         } else {
-            // Fallback: rimuovi il prefisso "O:" se presente e valuta
-            String expression = instruction.replaceAll("(?i)^O\\s*:\\s*", "").trim();
-            Object result = evaluateExpression(expression);
-            output.append(result).append("\n");
+            expression = instruction.replaceAll("(?i)^O\\s*:\\s*", "").trim();
         }
+
+        // Valuta l'espressione
+        // Se è una stringa tra virgolette, evaluateExpression la restituirà senza virgolette
+        // Se è una variabile o un'espressione, la valuterà
+        Object result = evaluateExpression(expression);
+        output.append(result).append("\n");
     }
 
     private void requestInput(String varName) {
