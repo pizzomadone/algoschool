@@ -1,3 +1,4 @@
+import com.mxgraph.canvas.mxGraphics2DCanvas;
 import com.mxgraph.layout.hierarchical.mxHierarchicalLayout;
 import com.mxgraph.model.mxCell;
 import com.mxgraph.model.mxGeometry;
@@ -60,6 +61,9 @@ public class FlowchartPanel extends JPanel {
 
     public FlowchartPanel() {
         setLayout(new BorderLayout());
+
+        // Register custom shape for parallelogram (used for Input/Output)
+        mxGraphics2DCanvas.putShape("parallelogram", new ParallelogramShape());
 
         // Create graph
         graph = new mxGraph() {
@@ -155,18 +159,16 @@ public class FlowchartPanel extends JPanel {
         inputStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
         inputStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
         inputStyle.put(mxConstants.STYLE_FONTSIZE, 12);
-        inputStyle.put(mxConstants.STYLE_DIRECTION, "east");  // Parallelogram direction
         stylesheet.putCellStyle(INPUT, inputStyle);
 
-        // Output block style (parallelogram, green)
+        // Output block style (parallelogram, darker green)
         Map<String, Object> outputStyle = new HashMap<>();
         outputStyle.put(mxConstants.STYLE_SHAPE, "parallelogram");
-        outputStyle.put(mxConstants.STYLE_FILLCOLOR, "#B3FFB3");
+        outputStyle.put(mxConstants.STYLE_FILLCOLOR, "#A3D9A3");
         outputStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
         outputStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
         outputStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
         outputStyle.put(mxConstants.STYLE_FONTSIZE, 12);
-        outputStyle.put(mxConstants.STYLE_DIRECTION, "east");  // Parallelogram direction
         stylesheet.putCellStyle(OUTPUT, outputStyle);
 
         // Conditional block style (diamond, yellow)
