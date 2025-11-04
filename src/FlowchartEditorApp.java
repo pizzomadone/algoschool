@@ -90,11 +90,14 @@ public class FlowchartEditorApp extends JFrame {
                     outputPanel.setOutput(output);
                 });
 
-                // Add delay for visualization
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                // Add delay for visualization only in automatic mode
+                // In step-by-step mode, the user controls the pace
+                if (!interpreter.isPaused() && interpreter.isRunning()) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
 
@@ -446,11 +449,17 @@ public class FlowchartEditorApp extends JFrame {
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
                 "When you insert a Conditional block:\n" +
                 "• A diamond shape is created\n" +
-                "• Two branches (True/False) automatically appear\n" +
+                "• Two branches (Sì/No) automatically appear\n" +
                 "• Both branches merge at a point (black dot)\n" +
                 "• Click on these branch edges to add more blocks!\n\n" +
+                "CONDITION SYNTAX:\n" +
+                "• Comparison: x > 5, n <= 10, age == 18, name != \"Bob\"\n" +
+                "• AND: x > 0 AND y < 10  (also: &&, &)\n" +
+                "• OR: x < 0 OR x > 100  (also: ||, |)\n" +
+                "• NOT: NOT x > 0  (also: !)\n" +
+                "• Parentheses: (x > 0 AND y > 0) OR z == 1\n\n" +
                 "NESTED IFs:\n" +
-                "• Click on a True or False branch edge\n" +
+                "• Click on a Sì or No branch edge\n" +
                 "• Insert another Conditional block\n" +
                 "• The layout automatically reorganizes!\n\n" +
                 "EDITING\n" +
@@ -474,12 +483,20 @@ public class FlowchartEditorApp extends JFrame {
                 "• F1 → Show this help\n\n" +
                 "BLOCK TYPES\n" +
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                "• Process: Blue rectangle (actions/operations)\n" +
-                "• Conditional (IF): Yellow diamond (decisions)\n" +
-                "• I/O: Green cylinder (input/output/storage)\n" +
-                "• Loop: Orange hexagon (while/for loops)\n" +
+                "• Assignment: Blue rectangle (x = 5, result = x + y)\n" +
+                "• Conditional (IF): Yellow diamond (x > 0?, n == 5?)\n" +
+                "• Input: Green parallelogram with bold I: (enter: n)\n" +
+                "• Output: Green parallelogram with bold O: (enter: result or \"Hello\")\n" +
+                "• Loop: Orange hexagon (i < n?, while conditions)\n" +
                 "• Start/End: Gray rounded rectangle (fixed)\n" +
                 "• Merge Point: Black dot (automatic for IFs)\n\n" +
+                "INPUT/OUTPUT FORMAT:\n" +
+                "• Input block: Write only the variable name (e.g., \"n\")\n" +
+                "  → The bold I: appears automatically on the left\n" +
+                "• Output block: Write the expression or string\n" +
+                "  → For variables: \"result\" or \"x + y\"\n" +
+                "  → For strings: \"Hello\" or \"The value is\"\n" +
+                "  → The bold O: appears automatically on the left\n\n" +
                 "TIPS & TRICKS\n" +
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
                 "✓ Use Examples menu to see pre-built flowcharts\n" +
@@ -491,15 +508,18 @@ public class FlowchartEditorApp extends JFrame {
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
                 "1. Start with: Start → End\n" +
                 "2. Click the edge between Start and End\n" +
-                "3. Insert \"I/O\" block: \"Input: number\"\n" +
-                "4. Click edge after I/O block\n" +
-                "5. Insert \"Conditional\": \"number > 0?\"\n" +
-                "   → Two branches appear automatically!\n" +
-                "6. Click the True (green) branch\n" +
-                "7. Insert \"Process\": \"result = number * 2\"\n" +
-                "8. Click the False (red) branch\n" +
-                "9. Insert \"Process\": \"result = 0\"\n" +
-                "10. Both branches merge automatically!\n\n" +
+                "3. Insert \"Input Block\" and enter: number\n" +
+                "   → You'll see: [I:] ╱number╲\n" +
+                "4. Click edge after Input block\n" +
+                "5. Insert \"Conditional\" and enter: number > 0\n" +
+                "   → Two branches (Sì/No) appear automatically!\n" +
+                "6. Click the Sì (green) branch\n" +
+                "7. Insert \"Assignment\": result = number * 2\n" +
+                "8. Click the No (red) branch\n" +
+                "9. Insert \"Assignment\": result = 0\n" +
+                "10. After the merge, add Output block: result\n" +
+                "    → You'll see: [O:] ╱result╲\n" +
+                "11. Click ▶ Run All or ⏯ Next Step to execute!\n\n" +
                 "Ready to create flowcharts! 🎨";
 
         JTextArea textArea = new JTextArea(help);

@@ -19,6 +19,8 @@ public class FlowchartInterpreter {
     private Object endCell;
     private boolean isRunning;
     private boolean isPaused;
+    private volatile boolean isSteppingMode;  // Aggiunto per tracciare la modalità step-by-step (volatile per thread-safety)
+    private volatile boolean isExecutingStep;  // Flag per prevenire esecuzioni multiple simultanee
     private ExecutionListener listener;
 
     // Stack per gestire i loop
@@ -72,26 +74,41 @@ public class FlowchartInterpreter {
         currentCell = startCell;
         isRunning = false;
         isPaused = false;
+        isSteppingMode = false;
+        isExecutingStep = false;
     }
 
     public void start() {
         reset();
         isRunning = true;
+        isSteppingMode = false;  // Esecuzione automatica
         currentCell = startCell;
         executeAll();
     }
 
-    public void step() {
-        if (!isRunning) {
-            reset();
-            isRunning = true;
-            currentCell = startCell;
+    public synchronized void step() {
+        // Previeni esecuzioni multiple simultanee
+        if (isExecutingStep) {
+            return;
         }
 
-        if (currentCell != null && currentCell != endCell) {
-            executeStep();
-        } else {
-            stop();
+        isExecutingStep = true;
+
+        try {
+            if (!isRunning) {
+                reset();
+                isRunning = true;
+                isSteppingMode = true;  // Modalità step-by-step
+                currentCell = startCell;
+            }
+
+            if (currentCell != null && currentCell != endCell) {
+                executeStep();
+            } else {
+                stop();
+            }
+        } finally {
+            isExecutingStep = false;
         }
     }
 
@@ -109,6 +126,7 @@ public class FlowchartInterpreter {
 
     public void resume() {
         isPaused = false;
+        isSteppingMode = false;  // Quando si riprende, si passa a esecuzione automatica
         executeAll();
     }
 
@@ -205,43 +223,55 @@ public class FlowchartInterpreter {
     }
 
     private void executeInput(String instruction) {
+        // Con il nuovo formato, il testo contiene solo i nomi delle variabili
+        // (senza "I:" perché ora è visualizzato fuori dal blocco)
+        instruction = instruction.trim();
+
+        // Rimuovi eventuali prefissi "I:" o "Input:" se presenti (per compatibilità)
         Matcher inputMatcher = INPUT_PATTERN.matcher(instruction);
+        String varNames;
 
         if (inputMatcher.find()) {
-            // Input - rimuovi il prefisso "I:" o "Input:" e ottieni i nomi delle variabili
-            String varNames = inputMatcher.group(1).trim();
-            String[] vars = varNames.split(",");
+            varNames = inputMatcher.group(1).trim();
+        } else {
+            varNames = instruction.replaceAll("(?i)^I\\s*:\\s*", "").trim();
+        }
 
-            for (String varName : vars) {
-                varName = varName.trim();
+        // Gestisci multiple variabili separate da virgola
+        String[] vars = varNames.split(",");
+
+        for (String varName : vars) {
+            varName = varName.trim();
+            if (!varName.isEmpty()) {
                 requestInput(varName);
             }
-        } else {
-            // Fallback: assume che l'intera stringa sia un nome di variabile
-            String varName = instruction.replaceAll("(?i)^I\\s*:\\s*", "").trim();
-            requestInput(varName);
         }
     }
 
     private void executeOutput(String instruction) {
+        // Con il nuovo formato, il testo contiene solo l'espressione o stringa
+        // (senza "O:" perché ora è visualizzato fuori dal blocco)
+        instruction = instruction.trim();
+
+        // Rimuovi eventuali prefissi "O:" o "Output:" se presenti (per compatibilità)
         Matcher outputMatcher = OUTPUT_PATTERN.matcher(instruction);
+        String expression;
 
         if (outputMatcher.find()) {
-            // Output - rimuovi il prefisso "O:" o "Output:" e valuta l'espressione
-            String expression = outputMatcher.group(1).trim();
-            Object result = evaluateExpression(expression);
-            output.append(result).append("\n");
+            expression = outputMatcher.group(1).trim();
         } else {
-            // Fallback: rimuovi il prefisso "O:" se presente e valuta
-            String expression = instruction.replaceAll("(?i)^O\\s*:\\s*", "").trim();
-            Object result = evaluateExpression(expression);
-            output.append(result).append("\n");
+            expression = instruction.replaceAll("(?i)^O\\s*:\\s*", "").trim();
         }
+
+        // Valuta l'espressione
+        // Se è una stringa tra virgolette, evaluateExpression la restituirà senza virgolette
+        // Se è una variabile o un'espressione, la valuterà
+        Object result = evaluateExpression(expression);
+        output.append(result).append("\n");
     }
 
     private void requestInput(String varName) {
         // Richiedi input all'utente
-        boolean wasRunningAutomatically = !isPaused && isRunning;
 
         // Salva il cell corrente per poterlo avanzare dopo l'input
         Object cellToAdvance = currentCell;
@@ -275,8 +305,8 @@ public class FlowchartInterpreter {
                 // Togliamo la pausa dopo l'input
                 isPaused = false;
 
-                // Riprendi solo se eravamo in esecuzione automatica
-                if (wasRunningAutomatically) {
+                // Riprendi solo se NON siamo in modalità step-by-step
+                if (!isSteppingMode) {
                     resume();
                 }
                 // Se siamo in step-by-step, l'esecuzione è completa per questo step
@@ -289,6 +319,33 @@ public class FlowchartInterpreter {
         try {
             // Rimuovi il punto interrogativo se presente
             condition = condition.replaceAll("\\?", "").trim();
+
+            // Gestisci operatori logici AND (&&, AND, &)
+            if (condition.matches(".*\\s+(AND|&&|&)\\s+.*")) {
+                String[] parts = condition.split("\\s+(AND|&&|&)\\s+", 2);
+                if (parts.length == 2) {
+                    return evaluateCondition(parts[0].trim()) && evaluateCondition(parts[1].trim());
+                }
+            }
+
+            // Gestisci operatori logici OR (||, OR, |)
+            if (condition.matches(".*\\s+(OR|\\|\\||\\|)\\s+.*")) {
+                String[] parts = condition.split("\\s+(OR|\\|\\||\\|)\\s+", 2);
+                if (parts.length == 2) {
+                    return evaluateCondition(parts[0].trim()) || evaluateCondition(parts[1].trim());
+                }
+            }
+
+            // Gestisci operatore logico NOT (!, NOT)
+            if (condition.matches("^(NOT|!)\\s+.*")) {
+                String subCondition = condition.replaceFirst("^(NOT|!)\\s+", "").trim();
+                return !evaluateCondition(subCondition);
+            }
+
+            // Gestisci parentesi per raggruppamento
+            if (condition.startsWith("(") && condition.endsWith(")")) {
+                return evaluateCondition(condition.substring(1, condition.length() - 1).trim());
+            }
 
             // Pattern per condizioni semplici: var op value
             Pattern pattern = Pattern.compile("(.+?)\\s*([<>=!]+)\\s*(.+)");
@@ -312,7 +369,7 @@ public class FlowchartInterpreter {
 
         } catch (Exception e) {
             if (listener != null) {
-                listener.onExecutionError("Errore nella valutazione della condizione: " + condition);
+                listener.onExecutionError("Errore nella valutazione della condizione: " + condition + " - " + e.getMessage());
             }
         }
 
