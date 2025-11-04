@@ -42,7 +42,9 @@ public class FlowchartPanel extends JPanel {
     public static final String INPUT = "INPUT";  // Input block (parallelogram with I)
     public static final String OUTPUT = "OUTPUT";  // Output block (parallelogram with O)
     public static final String CONDITIONAL = "CONDITIONAL";
-    public static final String LOOP = "LOOP";
+    public static final String LOOP = "LOOP";  // While loop
+    public static final String FOR_LOOP = "FOR_LOOP";  // For loop
+    public static final String DO_WHILE = "DO_WHILE";  // Do-While loop
     public static final String START = "START";
     public static final String END = "END";
     public static final String MERGE = "MERGE";  // Merge point for conditionals
@@ -181,7 +183,7 @@ public class FlowchartPanel extends JPanel {
         conditionalStyle.put(mxConstants.STYLE_FONTSIZE, 12);
         stylesheet.putCellStyle(CONDITIONAL, conditionalStyle);
 
-        // Loop block style (hexagon, orange)
+        // Loop block style (hexagon, orange) - WHILE
         Map<String, Object> loopStyle = new HashMap<>();
         loopStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_HEXAGON);
         loopStyle.put(mxConstants.STYLE_FILLCOLOR, "#FFDCC8");
@@ -191,6 +193,28 @@ public class FlowchartPanel extends JPanel {
         loopStyle.put(mxConstants.STYLE_FONTSIZE, 12);
         loopStyle.put(mxConstants.STYLE_PERIMETER, mxConstants.PERIMETER_HEXAGON);
         stylesheet.putCellStyle(LOOP, loopStyle);
+
+        // For loop style (hexagon, light purple)
+        Map<String, Object> forLoopStyle = new HashMap<>();
+        forLoopStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_HEXAGON);
+        forLoopStyle.put(mxConstants.STYLE_FILLCOLOR, "#E8DCFF");
+        forLoopStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        forLoopStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        forLoopStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        forLoopStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        forLoopStyle.put(mxConstants.STYLE_PERIMETER, mxConstants.PERIMETER_HEXAGON);
+        stylesheet.putCellStyle(FOR_LOOP, forLoopStyle);
+
+        // Do-While loop style (hexagon, light pink)
+        Map<String, Object> doWhileStyle = new HashMap<>();
+        doWhileStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_HEXAGON);
+        doWhileStyle.put(mxConstants.STYLE_FILLCOLOR, "#FFDCE8");
+        doWhileStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        doWhileStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        doWhileStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        doWhileStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        doWhileStyle.put(mxConstants.STYLE_PERIMETER, mxConstants.PERIMETER_HEXAGON);
+        stylesheet.putCellStyle(DO_WHILE, doWhileStyle);
 
         // Start/End block style (rounded rectangle, gray)
         Map<String, Object> startEndStyle = new HashMap<>();
@@ -536,9 +560,9 @@ public class FlowchartPanel extends JPanel {
                 graph.insertEdge(parent, null, "", mergePoint, target);
 
             } else if (LOOP.equals(blockType)) {
-                // Special handling for loop blocks
+                // Special handling for WHILE loop blocks
                 String loopText = JOptionPane.showInputDialog(this,
-                    "Inserisci la condizione del ciclo:", "i < n");
+                    "Inserisci la condizione del ciclo WHILE:", "i < n");
                 if (loopText == null || loopText.trim().isEmpty()) {
                     loopText = "condizione";
                 }
@@ -563,6 +587,72 @@ public class FlowchartPanel extends JPanel {
 
                 // No branch: exit loop (RED arrow) - point directly to target
                 graph.insertEdge(parent, null, "No", loopBlock, target, "FALSE_BRANCH");
+
+            } else if (FOR_LOOP.equals(blockType)) {
+                // Special handling for FOR loop blocks
+                // For loop: init; condition; increment
+                String initText = JOptionPane.showInputDialog(this,
+                    "Inserisci l'inizializzazione del FOR (es. i = 0):", "i = 0");
+                if (initText == null) initText = "i = 0";
+
+                String condText = JOptionPane.showInputDialog(this,
+                    "Inserisci la condizione del FOR (es. i < n):", "i < n");
+                if (condText == null) condText = "i < n";
+
+                String incrText = JOptionPane.showInputDialog(this,
+                    "Inserisci l'incremento del FOR (es. i = i + 1):", "i = i + 1");
+                if (incrText == null) incrText = "i = i + 1";
+
+                // Combine into a single string for display
+                String forText = initText + "; " + condText + "; " + incrText;
+
+                // Create the for loop block
+                Object forBlock = graph.insertVertex(parent, null, forText,
+                    0, 0, 180, 70, FOR_LOOP);
+
+                // Create merge point for loop body
+                Object bodyMergePoint = graph.insertVertex(parent, null, "",
+                    0, 0, 15, 15, MERGE);
+
+                // Connect source to for loop
+                graph.insertEdge(parent, null, "", source, forBlock);
+
+                // Yes branch: enter loop body (GREEN arrow)
+                graph.insertEdge(parent, null, "Yes", forBlock, bodyMergePoint, "TRUE_BRANCH");
+
+                // Loop back: from body merge point to for loop
+                graph.insertEdge(parent, null, "", bodyMergePoint, forBlock);
+
+                // No branch: exit loop (RED arrow)
+                graph.insertEdge(parent, null, "No", forBlock, target, "FALSE_BRANCH");
+
+            } else if (DO_WHILE.equals(blockType)) {
+                // Special handling for DO-WHILE loop blocks
+                String condText = JOptionPane.showInputDialog(this,
+                    "Inserisci la condizione del DO-WHILE:", "i < n");
+                if (condText == null || condText.trim().isEmpty()) {
+                    condText = "condizione";
+                }
+
+                // Create merge point for loop body (entered first)
+                Object bodyMergePoint = graph.insertVertex(parent, null, "",
+                    0, 0, 15, 15, MERGE);
+
+                // Create the do-while condition block
+                Object doWhileBlock = graph.insertVertex(parent, null, condText,
+                    0, 0, 120, 70, DO_WHILE);
+
+                // Connect source to body merge point (body is executed first)
+                graph.insertEdge(parent, null, "", source, bodyMergePoint);
+
+                // From body, go to condition
+                graph.insertEdge(parent, null, "", bodyMergePoint, doWhileBlock);
+
+                // Yes branch: loop back to body (GREEN arrow)
+                graph.insertEdge(parent, null, "Yes", doWhileBlock, bodyMergePoint, "TRUE_BRANCH");
+
+                // No branch: exit loop (RED arrow)
+                graph.insertEdge(parent, null, "No", doWhileBlock, target, "FALSE_BRANCH");
 
             } else {
                 // Regular blocks (Assignment, Input, Output)
@@ -619,9 +709,17 @@ public class FlowchartPanel extends JPanel {
         conditionalItem.addActionListener(e -> insertBlockOnEdge(edge, CONDITIONAL));
         menu.add(conditionalItem);
 
-        JMenuItem loopItem = new JMenuItem("Insert Loop Block");
+        JMenuItem loopItem = new JMenuItem("Insert While Loop Block");
         loopItem.addActionListener(e -> insertBlockOnEdge(edge, LOOP));
         menu.add(loopItem);
+
+        JMenuItem forLoopItem = new JMenuItem("Insert For Loop Block");
+        forLoopItem.addActionListener(e -> insertBlockOnEdge(edge, FOR_LOOP));
+        menu.add(forLoopItem);
+
+        JMenuItem doWhileItem = new JMenuItem("Insert Do-While Loop Block");
+        doWhileItem.addActionListener(e -> insertBlockOnEdge(edge, DO_WHILE));
+        menu.add(doWhileItem);
 
         menu.addSeparator();
 
