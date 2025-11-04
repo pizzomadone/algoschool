@@ -26,8 +26,8 @@ public class FlowchartInterpreter {
 
     // Pattern per riconoscere le operazioni
     private static final Pattern ASSIGNMENT_PATTERN = Pattern.compile("(.+?)\\s*=\\s*(.+)");
-    private static final Pattern INPUT_PATTERN = Pattern.compile("(?i)input\\s*:?\\s*(.+)");
-    private static final Pattern OUTPUT_PATTERN = Pattern.compile("(?i)output\\s*:?\\s*(.+)");
+    private static final Pattern INPUT_PATTERN = Pattern.compile("(?i)(?:I\\s*:|input)\\s*:?\\s*(.+)");
+    private static final Pattern OUTPUT_PATTERN = Pattern.compile("(?i)(?:O\\s*:|output)\\s*:?\\s*(.+)");
 
     public interface ExecutionListener {
         void onExecutionStep(Object cell, Map<String, Object> variables, String output);
@@ -141,20 +141,21 @@ public class FlowchartInterpreter {
                 // Blocco Start - passa al prossimo
                 moveToNext(cell);
 
-            } else if (FlowchartPanel.PROCESS.equals(style)) {
-                // Blocco Process - esegui assegnamento
-                executeProcess(value);
+            } else if (FlowchartPanel.ASSIGNMENT.equals(style)) {
+                // Blocco Assignment - esegui assegnamento
+                executeAssignment(value);
                 moveToNext(cell);
 
-            } else if (FlowchartPanel.IO.equals(style)) {
-                // Blocco I/O - gestisci input o output
-                boolean wasInput = value != null && value.toLowerCase().contains("input");
-                executeIO(value);
-                // moveToNext viene chiamato in completeInputAndAdvance dopo l'input
-                // o subito se era output
-                if (!isPaused) {
-                    moveToNext(cell);
-                }
+            } else if (FlowchartPanel.INPUT.equals(style)) {
+                // Blocco Input - richiedi input all'utente
+                executeInput(value);
+                // moveToNext viene chiamato in requestInput dopo l'input
+                // Non chiamare moveToNext qui perché siamo in pausa
+
+            } else if (FlowchartPanel.OUTPUT.equals(style)) {
+                // Blocco Output - visualizza output
+                executeOutput(value);
+                moveToNext(cell);
 
             } else if (FlowchartPanel.CONDITIONAL.equals(style)) {
                 // Blocco Conditional - valuta condizione
@@ -189,7 +190,7 @@ public class FlowchartInterpreter {
         }
     }
 
-    private void executeProcess(String instruction) {
+    private void executeAssignment(String instruction) {
         Matcher matcher = ASSIGNMENT_PATTERN.matcher(instruction);
         if (matcher.matches()) {
             String varName = matcher.group(1).trim();
@@ -203,12 +204,11 @@ public class FlowchartInterpreter {
         }
     }
 
-    private void executeIO(String instruction) {
+    private void executeInput(String instruction) {
         Matcher inputMatcher = INPUT_PATTERN.matcher(instruction);
-        Matcher outputMatcher = OUTPUT_PATTERN.matcher(instruction);
 
         if (inputMatcher.find()) {
-            // Input
+            // Input - rimuovi il prefisso "I:" o "Input:" e ottieni i nomi delle variabili
             String varNames = inputMatcher.group(1).trim();
             String[] vars = varNames.split(",");
 
@@ -216,16 +216,26 @@ public class FlowchartInterpreter {
                 varName = varName.trim();
                 requestInput(varName);
             }
+        } else {
+            // Fallback: assume che l'intera stringa sia un nome di variabile
+            String varName = instruction.replaceAll("(?i)^I\\s*:\\s*", "").trim();
+            requestInput(varName);
+        }
+    }
 
-        } else if (outputMatcher.find()) {
-            // Output
+    private void executeOutput(String instruction) {
+        Matcher outputMatcher = OUTPUT_PATTERN.matcher(instruction);
+
+        if (outputMatcher.find()) {
+            // Output - rimuovi il prefisso "O:" o "Output:" e valuta l'espressione
             String expression = outputMatcher.group(1).trim();
             Object result = evaluateExpression(expression);
             output.append(result).append("\n");
-
         } else {
-            // Prova a interpretare come output generico
-            output.append(instruction).append("\n");
+            // Fallback: rimuovi il prefisso "O:" se presente e valuta
+            String expression = instruction.replaceAll("(?i)^O\\s*:\\s*", "").trim();
+            Object result = evaluateExpression(expression);
+            output.append(result).append("\n");
         }
     }
 

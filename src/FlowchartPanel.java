@@ -37,13 +37,19 @@ public class FlowchartPanel extends JPanel {
     private boolean initialLayoutApplied = false;
 
     // Block type constants
-    public static final String PROCESS = "PROCESS";
+    public static final String ASSIGNMENT = "ASSIGNMENT";  // Assignment block (rectangle)
+    public static final String INPUT = "INPUT";  // Input block (parallelogram with I)
+    public static final String OUTPUT = "OUTPUT";  // Output block (parallelogram with O)
     public static final String CONDITIONAL = "CONDITIONAL";
-    public static final String IO = "IO";
     public static final String LOOP = "LOOP";
     public static final String START = "START";
     public static final String END = "END";
     public static final String MERGE = "MERGE";  // Merge point for conditionals
+
+    @Deprecated
+    public static final String PROCESS = ASSIGNMENT;  // Deprecated: use ASSIGNMENT
+    @Deprecated
+    public static final String IO = OUTPUT;  // Deprecated: use INPUT or OUTPUT
 
     // Track merge points for conditionals
     private Map<Object, Object> conditionalMergePoints = new HashMap<>();
@@ -130,16 +136,38 @@ public class FlowchartPanel extends JPanel {
     private void setupStyles() {
         mxStylesheet stylesheet = graph.getStylesheet();
 
-        // Process block style (rectangle, blue)
-        Map<String, Object> processStyle = new HashMap<>();
-        processStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
-        processStyle.put(mxConstants.STYLE_FILLCOLOR, "#C8DCFF");
-        processStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
-        processStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
-        processStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
-        processStyle.put(mxConstants.STYLE_FONTSIZE, 12);
-        processStyle.put(mxConstants.STYLE_ROUNDED, false);
-        stylesheet.putCellStyle(PROCESS, processStyle);
+        // Assignment block style (rectangle, blue)
+        Map<String, Object> assignmentStyle = new HashMap<>();
+        assignmentStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
+        assignmentStyle.put(mxConstants.STYLE_FILLCOLOR, "#C8DCFF");
+        assignmentStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        assignmentStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        assignmentStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        assignmentStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        assignmentStyle.put(mxConstants.STYLE_ROUNDED, false);
+        stylesheet.putCellStyle(ASSIGNMENT, assignmentStyle);
+
+        // Input block style (parallelogram, light green)
+        Map<String, Object> inputStyle = new HashMap<>();
+        inputStyle.put(mxConstants.STYLE_SHAPE, "parallelogram");
+        inputStyle.put(mxConstants.STYLE_FILLCOLOR, "#C8FFC8");
+        inputStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        inputStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        inputStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        inputStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        inputStyle.put(mxConstants.STYLE_DIRECTION, "east");  // Parallelogram direction
+        stylesheet.putCellStyle(INPUT, inputStyle);
+
+        // Output block style (parallelogram, green)
+        Map<String, Object> outputStyle = new HashMap<>();
+        outputStyle.put(mxConstants.STYLE_SHAPE, "parallelogram");
+        outputStyle.put(mxConstants.STYLE_FILLCOLOR, "#B3FFB3");
+        outputStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        outputStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        outputStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        outputStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        outputStyle.put(mxConstants.STYLE_DIRECTION, "east");  // Parallelogram direction
+        stylesheet.putCellStyle(OUTPUT, outputStyle);
 
         // Conditional block style (diamond, yellow)
         Map<String, Object> conditionalStyle = new HashMap<>();
@@ -150,18 +178,6 @@ public class FlowchartPanel extends JPanel {
         conditionalStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
         conditionalStyle.put(mxConstants.STYLE_FONTSIZE, 12);
         stylesheet.putCellStyle(CONDITIONAL, conditionalStyle);
-
-        // I/O block style (rounded rectangle, green - since PARALLELOGRAM might not exist)
-        Map<String, Object> ioStyle = new HashMap<>();
-        ioStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
-        ioStyle.put(mxConstants.STYLE_FILLCOLOR, "#C8FFC8");
-        ioStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
-        ioStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
-        ioStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
-        ioStyle.put(mxConstants.STYLE_FONTSIZE, 12);
-        ioStyle.put(mxConstants.STYLE_ROUNDED, true);
-        ioStyle.put(mxConstants.STYLE_ARCSIZE, 15);
-        stylesheet.putCellStyle(IO, ioStyle);
 
         // Loop block style (hexagon, orange)
         Map<String, Object> loopStyle = new HashMap<>();
@@ -499,13 +515,13 @@ public class FlowchartPanel extends JPanel {
 
                 // Create True branch (empty for now)
                 Object truePlaceholder = graph.insertVertex(parent, null, "True Action",
-                    0, 0, 140, 60, PROCESS);
+                    0, 0, 140, 60, ASSIGNMENT);
                 graph.insertEdge(parent, null, "Sì", condBlock, truePlaceholder, "TRUE_BRANCH");
                 graph.insertEdge(parent, null, "", truePlaceholder, mergePoint);
 
                 // Create False branch (empty for now)
                 Object falsePlaceholder = graph.insertVertex(parent, null, "False Action",
-                    0, 0, 140, 60, PROCESS);
+                    0, 0, 140, 60, ASSIGNMENT);
                 graph.insertEdge(parent, null, "No", condBlock, falsePlaceholder, "FALSE_BRANCH");
                 graph.insertEdge(parent, null, "", falsePlaceholder, mergePoint);
 
@@ -533,7 +549,7 @@ public class FlowchartPanel extends JPanel {
 
                 // Create loop body
                 Object loopBody = graph.insertVertex(parent, null, "Loop body",
-                    0, 0, 140, 60, PROCESS);
+                    0, 0, 140, 60, ASSIGNMENT);
                 graph.insertEdge(parent, null, "Yes", loopBlock, loopBody, "TRUE_BRANCH");
 
                 // Loop back from body to loop condition
@@ -544,7 +560,7 @@ public class FlowchartPanel extends JPanel {
                 graph.insertEdge(parent, null, "", mergePoint, target);
 
             } else {
-                // Regular blocks (Process, I/O)
+                // Regular blocks (Assignment, Input, Output)
                 String blockText = JOptionPane.showInputDialog(this,
                     "Enter block text:", getDefaultTextForBlockType(blockType));
                 if (blockText == null || blockText.trim().isEmpty()) {
@@ -553,7 +569,10 @@ public class FlowchartPanel extends JPanel {
 
                 // Determine dimensions based on type
                 int width = 140;
-                int height = (IO.equals(blockType)) ? 70 : 60;
+                int height = 60;
+                if (INPUT.equals(blockType) || OUTPUT.equals(blockType)) {
+                    height = 70;  // Parallelograms are slightly taller
+                }
 
                 // Create the new block
                 Object newBlock = graph.insertVertex(parent, null, blockText,
@@ -575,17 +594,23 @@ public class FlowchartPanel extends JPanel {
     private void showInsertBlockMenu(Object edge, int x, int y) {
         JPopupMenu menu = new JPopupMenu();
 
-        JMenuItem processItem = new JMenuItem("Insert Process Block");
-        processItem.addActionListener(e -> insertBlockOnEdge(edge, PROCESS));
-        menu.add(processItem);
+        JMenuItem assignmentItem = new JMenuItem("Insert Assignment Block (□)");
+        assignmentItem.addActionListener(e -> insertBlockOnEdge(edge, ASSIGNMENT));
+        menu.add(assignmentItem);
+
+        JMenuItem inputItem = new JMenuItem("Insert Input Block (▱ I)");
+        inputItem.addActionListener(e -> insertBlockOnEdge(edge, INPUT));
+        menu.add(inputItem);
+
+        JMenuItem outputItem = new JMenuItem("Insert Output Block (▱ O)");
+        outputItem.addActionListener(e -> insertBlockOnEdge(edge, OUTPUT));
+        menu.add(outputItem);
+
+        menu.addSeparator();
 
         JMenuItem conditionalItem = new JMenuItem("Insert Conditional (IF) Block");
         conditionalItem.addActionListener(e -> insertBlockOnEdge(edge, CONDITIONAL));
         menu.add(conditionalItem);
-
-        JMenuItem ioItem = new JMenuItem("Insert I/O Block");
-        ioItem.addActionListener(e -> insertBlockOnEdge(edge, IO));
-        menu.add(ioItem);
 
         JMenuItem loopItem = new JMenuItem("Insert Loop Block");
         loopItem.addActionListener(e -> insertBlockOnEdge(edge, LOOP));
@@ -623,12 +648,14 @@ public class FlowchartPanel extends JPanel {
 
     private String getDefaultTextForBlockType(String blockType) {
         switch (blockType) {
-            case PROCESS:
-                return "Process";
+            case ASSIGNMENT:
+                return "x = 0";
+            case INPUT:
+                return "I: Input n";
+            case OUTPUT:
+                return "O: Output n";
             case CONDITIONAL:
                 return "Condition?";
-            case IO:
-                return "Input/Output";
             case LOOP:
                 return "Loop condition?";
             case START:
@@ -656,7 +683,7 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
-            Object input = graph.insertVertex(parent, null, "Input: n", 0, 0, 140, 70, IO);
+            Object input = graph.insertVertex(parent, null, "I: Input n", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", start, input);
 
             Object condition = graph.insertVertex(parent, null, "n > 0?", 0, 0, 120, 80, CONDITIONAL);
@@ -665,15 +692,15 @@ public class FlowchartPanel extends JPanel {
             Object mergePoint = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
             conditionalMergePoints.put(condition, mergePoint);
 
-            Object processTrue = graph.insertVertex(parent, null, "result = n * 2", 0, 0, 140, 60, PROCESS);
+            Object processTrue = graph.insertVertex(parent, null, "result = n * 2", 0, 0, 140, 60, ASSIGNMENT);
             graph.insertEdge(parent, null, "Sì", condition, processTrue, "TRUE_BRANCH");
             graph.insertEdge(parent, null, "", processTrue, mergePoint);
 
-            Object processFalse = graph.insertVertex(parent, null, "result = 0", 0, 0, 140, 60, PROCESS);
+            Object processFalse = graph.insertVertex(parent, null, "result = 0", 0, 0, 140, 60, ASSIGNMENT);
             graph.insertEdge(parent, null, "No", condition, processFalse, "FALSE_BRANCH");
             graph.insertEdge(parent, null, "", processFalse, mergePoint);
 
-            Object output = graph.insertVertex(parent, null, "Output: result", 0, 0, 140, 70, IO);
+            Object output = graph.insertVertex(parent, null, "O: Output result", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "", mergePoint, output);
             graph.insertEdge(parent, null, "", output, end);
 
@@ -698,21 +725,27 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
-            Object input = graph.insertVertex(parent, null, "Input: n\ni = 0", 0, 0, 140, 70, IO);
+            Object input = graph.insertVertex(parent, null, "I: Input n", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", start, input);
 
+            Object init = graph.insertVertex(parent, null, "i = 0", 0, 0, 140, 60, ASSIGNMENT);
+            graph.insertEdge(parent, null, "", input, init);
+
             Object loop = graph.insertVertex(parent, null, "i < n?", 0, 0, 120, 70, LOOP);
-            graph.insertEdge(parent, null, "", input, loop);
+            graph.insertEdge(parent, null, "", init, loop);
 
             Object mergePoint = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
 
-            Object loopBody = graph.insertVertex(parent, null, "Print i\ni = i + 1", 0, 0, 140, 60, PROCESS);
-            graph.insertEdge(parent, null, "Yes", loop, loopBody, "TRUE_BRANCH");
+            Object outputI = graph.insertVertex(parent, null, "O: Output i", 0, 0, 140, 70, OUTPUT);
+            graph.insertEdge(parent, null, "Yes", loop, outputI, "TRUE_BRANCH");
+
+            Object loopBody = graph.insertVertex(parent, null, "i = i + 1", 0, 0, 140, 60, ASSIGNMENT);
+            graph.insertEdge(parent, null, "", outputI, loopBody);
 
             graph.insertEdge(parent, null, "", loopBody, loop); // Loop back
             graph.insertEdge(parent, null, "No", loop, mergePoint, "FALSE_BRANCH");
 
-            Object output = graph.insertVertex(parent, null, "Done", 0, 0, 140, 70, IO);
+            Object output = graph.insertVertex(parent, null, "O: Output \"Done\"", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "", mergePoint, output);
             graph.insertEdge(parent, null, "", output, end);
 
@@ -737,11 +770,14 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
-            Object input = graph.insertVertex(parent, null, "Input: x, y", 0, 0, 140, 70, IO);
-            graph.insertEdge(parent, null, "", start, input);
+            Object inputX = graph.insertVertex(parent, null, "I: Input x", 0, 0, 140, 70, INPUT);
+            graph.insertEdge(parent, null, "", start, inputX);
+
+            Object inputY = graph.insertVertex(parent, null, "I: Input y", 0, 0, 140, 70, INPUT);
+            graph.insertEdge(parent, null, "", inputX, inputY);
 
             Object outerCond = graph.insertVertex(parent, null, "x > 0?", 0, 0, 120, 80, CONDITIONAL);
-            graph.insertEdge(parent, null, "", input, outerCond);
+            graph.insertEdge(parent, null, "", inputY, outerCond);
 
             Object outerMerge = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
 
@@ -750,21 +786,21 @@ public class FlowchartPanel extends JPanel {
 
             Object innerMerge = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
 
-            Object innerTrue = graph.insertVertex(parent, null, "result = x + y", 0, 0, 140, 60, PROCESS);
+            Object innerTrue = graph.insertVertex(parent, null, "result = x + y", 0, 0, 140, 60, ASSIGNMENT);
             graph.insertEdge(parent, null, "Sì", innerCond, innerTrue, "TRUE_BRANCH");
             graph.insertEdge(parent, null, "", innerTrue, innerMerge);
 
-            Object innerFalse = graph.insertVertex(parent, null, "result = x - y", 0, 0, 140, 60, PROCESS);
+            Object innerFalse = graph.insertVertex(parent, null, "result = x - y", 0, 0, 140, 60, ASSIGNMENT);
             graph.insertEdge(parent, null, "No", innerCond, innerFalse, "FALSE_BRANCH");
             graph.insertEdge(parent, null, "", innerFalse, innerMerge);
 
             graph.insertEdge(parent, null, "", innerMerge, outerMerge);
 
-            Object outerFalse = graph.insertVertex(parent, null, "result = 0", 0, 0, 140, 60, PROCESS);
+            Object outerFalse = graph.insertVertex(parent, null, "result = 0", 0, 0, 140, 60, ASSIGNMENT);
             graph.insertEdge(parent, null, "No", outerCond, outerFalse, "FALSE_BRANCH");
             graph.insertEdge(parent, null, "", outerFalse, outerMerge);
 
-            Object output = graph.insertVertex(parent, null, "Output: result", 0, 0, 140, 70, IO);
+            Object output = graph.insertVertex(parent, null, "O: Output result", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "", outerMerge, output);
             graph.insertEdge(parent, null, "", output, end);
 
