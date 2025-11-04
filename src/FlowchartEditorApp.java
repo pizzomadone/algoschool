@@ -68,10 +68,9 @@ public class FlowchartEditorApp extends JFrame {
 
         // Create main split pane
         JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollPane, rightSplitPane);
-        // Calcolo: window width (1400px) - right panel width (450px) = 950px
-        // Allargamento leggero del pannello sinistro: +50px
-        mainSplitPane.setDividerLocation(950);
-        mainSplitPane.setResizeWeight(950.0 / 1400.0);  // = 0.679
+        // Pannello destro: 1400 - 750 = 650px
+        mainSplitPane.setDividerLocation(750);
+        mainSplitPane.setResizeWeight(750.0 / 1400.0);  // = 0.536
 
         // Layout - DON'T add controlPanel here yet, will be added in setupToolbar()
         add(mainSplitPane, BorderLayout.CENTER);
