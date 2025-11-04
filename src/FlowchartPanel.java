@@ -515,17 +515,11 @@ public class FlowchartPanel extends JPanel {
                 // Connect source to conditional
                 graph.insertEdge(parent, null, "", source, condBlock);
 
-                // Create True branch (empty for now)
-                Object truePlaceholder = graph.insertVertex(parent, null, "True Action",
-                    0, 0, 140, 60, ASSIGNMENT);
-                graph.insertEdge(parent, null, "Sì", condBlock, truePlaceholder, "TRUE_BRANCH");
-                graph.insertEdge(parent, null, "", truePlaceholder, mergePoint);
+                // Create True branch - direttamente al merge point (senza blocchi intermedi)
+                graph.insertEdge(parent, null, "Sì", condBlock, mergePoint, "TRUE_BRANCH");
 
-                // Create False branch (empty for now)
-                Object falsePlaceholder = graph.insertVertex(parent, null, "False Action",
-                    0, 0, 140, 60, ASSIGNMENT);
-                graph.insertEdge(parent, null, "No", condBlock, falsePlaceholder, "FALSE_BRANCH");
-                graph.insertEdge(parent, null, "", falsePlaceholder, mergePoint);
+                // Create False branch - direttamente al merge point (senza blocchi intermedi)
+                graph.insertEdge(parent, null, "No", condBlock, mergePoint, "FALSE_BRANCH");
 
                 // Connect merge point to target
                 graph.insertEdge(parent, null, "", mergePoint, target);
@@ -685,7 +679,7 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
-            Object input = graph.insertVertex(parent, null, "I: Input n", 0, 0, 140, 70, INPUT);
+            Object input = graph.insertVertex(parent, null, "n", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", start, input);
 
             Object condition = graph.insertVertex(parent, null, "n > 0?", 0, 0, 120, 80, CONDITIONAL);
@@ -702,7 +696,7 @@ public class FlowchartPanel extends JPanel {
             graph.insertEdge(parent, null, "No", condition, processFalse, "FALSE_BRANCH");
             graph.insertEdge(parent, null, "", processFalse, mergePoint);
 
-            Object output = graph.insertVertex(parent, null, "O: Output result", 0, 0, 140, 70, OUTPUT);
+            Object output = graph.insertVertex(parent, null, "result", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "", mergePoint, output);
             graph.insertEdge(parent, null, "", output, end);
 
@@ -727,7 +721,7 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
-            Object input = graph.insertVertex(parent, null, "I: Input n", 0, 0, 140, 70, INPUT);
+            Object input = graph.insertVertex(parent, null, "n", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", start, input);
 
             Object init = graph.insertVertex(parent, null, "i = 0", 0, 0, 140, 60, ASSIGNMENT);
@@ -738,7 +732,7 @@ public class FlowchartPanel extends JPanel {
 
             Object mergePoint = graph.insertVertex(parent, null, "", 0, 0, 15, 15, MERGE);
 
-            Object outputI = graph.insertVertex(parent, null, "O: Output i", 0, 0, 140, 70, OUTPUT);
+            Object outputI = graph.insertVertex(parent, null, "i", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "Yes", loop, outputI, "TRUE_BRANCH");
 
             Object loopBody = graph.insertVertex(parent, null, "i = i + 1", 0, 0, 140, 60, ASSIGNMENT);
@@ -747,7 +741,7 @@ public class FlowchartPanel extends JPanel {
             graph.insertEdge(parent, null, "", loopBody, loop); // Loop back
             graph.insertEdge(parent, null, "No", loop, mergePoint, "FALSE_BRANCH");
 
-            Object output = graph.insertVertex(parent, null, "O: Output \"Done\"", 0, 0, 140, 70, OUTPUT);
+            Object output = graph.insertVertex(parent, null, "\"Done\"", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "", mergePoint, output);
             graph.insertEdge(parent, null, "", output, end);
 
@@ -772,10 +766,10 @@ public class FlowchartPanel extends JPanel {
             Object[] edges = graph.getEdgesBetween(start, end);
             if (edges.length > 0) graph.removeCells(edges);
 
-            Object inputX = graph.insertVertex(parent, null, "I: Input x", 0, 0, 140, 70, INPUT);
+            Object inputX = graph.insertVertex(parent, null, "x", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", start, inputX);
 
-            Object inputY = graph.insertVertex(parent, null, "I: Input y", 0, 0, 140, 70, INPUT);
+            Object inputY = graph.insertVertex(parent, null, "y", 0, 0, 140, 70, INPUT);
             graph.insertEdge(parent, null, "", inputX, inputY);
 
             Object outerCond = graph.insertVertex(parent, null, "x > 0?", 0, 0, 120, 80, CONDITIONAL);
@@ -802,7 +796,7 @@ public class FlowchartPanel extends JPanel {
             graph.insertEdge(parent, null, "No", outerCond, outerFalse, "FALSE_BRANCH");
             graph.insertEdge(parent, null, "", outerFalse, outerMerge);
 
-            Object output = graph.insertVertex(parent, null, "O: Output result", 0, 0, 140, 70, OUTPUT);
+            Object output = graph.insertVertex(parent, null, "result", 0, 0, 140, 70, OUTPUT);
             graph.insertEdge(parent, null, "", outerMerge, output);
             graph.insertEdge(parent, null, "", output, end);
 
