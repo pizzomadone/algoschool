@@ -1,4 +1,5 @@
 import com.mxgraph.canvas.mxGraphics2DCanvas;
+import com.mxgraph.io.mxCodec;
 import com.mxgraph.layout.hierarchical.mxHierarchicalLayout;
 import com.mxgraph.model.mxCell;
 import com.mxgraph.model.mxGeometry;
@@ -6,8 +7,11 @@ import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.util.mxPoint;
 import com.mxgraph.util.mxRectangle;
+import com.mxgraph.util.mxUtils;
+import com.mxgraph.util.mxXmlUtils;
 import com.mxgraph.view.mxGraph;
 import com.mxgraph.view.mxStylesheet;
+import org.w3c.dom.Document;
 
 import javax.swing.*;
 import java.awt.*;
@@ -15,6 +19,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -1007,5 +1012,88 @@ public class FlowchartPanel extends JPanel {
      */
     public Object getEndCell() {
         return endCell;
+    }
+
+    // ===== SAVE/LOAD FUNCTIONALITY =====
+
+    /**
+     * Save the flowchart to an XML file
+     */
+    public void saveFlowchart(File file) throws Exception {
+        mxCodec codec = new mxCodec();
+        String xml = mxXmlUtils.getXml(codec.encode(graph.getModel()));
+        mxUtils.writeFile(xml, file.getAbsolutePath());
+    }
+
+    /**
+     * Load a flowchart from an XML file
+     */
+    public void loadFlowchart(File file) throws Exception {
+        // Parse XML document
+        Document document = mxXmlUtils.parseXml(mxUtils.readFile(file.getAbsolutePath()));
+
+        // Create codec and decode
+        mxCodec codec = new mxCodec(document);
+
+        // Clear current graph
+        graph.getModel().beginUpdate();
+        try {
+            // Remove all cells
+            graph.removeCells(graph.getChildVertices(graph.getDefaultParent()));
+
+            // Decode the model
+            codec.decode(document.getDocumentElement(), graph.getModel());
+
+            // Find Start and End cells after loading
+            Object parent = graph.getDefaultParent();
+            Object[] vertices = graph.getChildVertices(parent);
+
+            startCell = null;
+            endCell = null;
+            conditionalMergePoints.clear();
+
+            for (Object vertex : vertices) {
+                mxCell cell = (mxCell) vertex;
+                String style = cell.getStyle();
+                String value = cell.getValue() != null ? cell.getValue().toString() : "";
+
+                if (START.equals(style) || "Start".equals(value)) {
+                    startCell = vertex;
+                }
+                if (END.equals(style) || "End".equals(value)) {
+                    endCell = vertex;
+                }
+
+                // Rebuild conditional merge points map
+                if (CONDITIONAL.equals(style)) {
+                    // Find the merge point for this conditional
+                    Object[] edges = graph.getEdges(vertex);
+                    for (Object edge : edges) {
+                        mxCell edgeCell = (mxCell) edge;
+                        if (edgeCell.getSource() == vertex) {
+                            Object target = edgeCell.getTarget();
+                            if (target instanceof mxCell) {
+                                mxCell targetCell = (mxCell) target;
+                                if (MERGE.equals(targetCell.getStyle())) {
+                                    conditionalMergePoints.put(vertex, target);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        } finally {
+            graph.getModel().endUpdate();
+        }
+
+        // Reset the layout flag and apply layout after component is ready
+        // This ensures the flowchart is centered correctly
+        initialLayoutApplied = false;
+        SwingUtilities.invokeLater(() -> {
+            applyHierarchicalLayout();
+            initialLayoutApplied = true;
+        });
     }
 }

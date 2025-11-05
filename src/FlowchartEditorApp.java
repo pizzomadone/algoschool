@@ -1,6 +1,8 @@
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
 import java.util.Map;
 
 /**
@@ -273,6 +275,18 @@ public class FlowchartEditorApp extends JFrame {
 
         fileMenu.addSeparator();
 
+        JMenuItem saveItem = new JMenuItem("Save...");
+        saveItem.setAccelerator(KeyStroke.getKeyStroke("control S"));
+        saveItem.addActionListener(e -> saveFlowchart());
+        fileMenu.add(saveItem);
+
+        JMenuItem loadItem = new JMenuItem("Load...");
+        loadItem.setAccelerator(KeyStroke.getKeyStroke("control O"));
+        loadItem.addActionListener(e -> loadFlowchart());
+        fileMenu.add(loadItem);
+
+        fileMenu.addSeparator();
+
         JMenuItem exitItem = new JMenuItem("Exit");
         exitItem.setAccelerator(KeyStroke.getKeyStroke("control Q"));
         exitItem.addActionListener(e -> exitApplication());
@@ -536,6 +550,93 @@ public class FlowchartEditorApp extends JFrame {
             "Flowchart Editor - Help",
             JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    private void saveFlowchart() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Flowchart");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Flowchart Files (*.xml)", "xml"));
+
+        int result = fileChooser.showSaveDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+
+            // Add .xml extension if not present
+            if (!file.getName().toLowerCase().endsWith(".xml")) {
+                file = new File(file.getAbsolutePath() + ".xml");
+            }
+
+            try {
+                flowchartPanel.saveFlowchart(file);
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Flowchart saved successfully to:\n" + file.getAbsolutePath(),
+                    "Save Successful",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Error saving flowchart:\n" + ex.getMessage(),
+                    "Save Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    private void loadFlowchart() {
+        int choice = JOptionPane.showConfirmDialog(
+            this,
+            "Load a flowchart? This will replace the current diagram.",
+            "Load Flowchart",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.QUESTION_MESSAGE
+        );
+
+        if (choice == JOptionPane.OK_OPTION) {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Load Flowchart");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("Flowchart Files (*.xml)", "xml"));
+
+            int result = fileChooser.showOpenDialog(this);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+
+                try {
+                    flowchartPanel.loadFlowchart(file);
+
+                    // Reset execution state
+                    interpreter = new FlowchartInterpreter(
+                        flowchartPanel.getGraph(),
+                        flowchartPanel.getStartCell(),
+                        flowchartPanel.getEndCell()
+                    );
+                    setupInterpreter();
+
+                    outputPanel.clear();
+                    variablesPanel.clear();
+                    controlPanel.setStatus("Ready");
+                    controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
+
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Flowchart loaded successfully from:\n" + file.getAbsolutePath(),
+                        "Load Successful",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Error loading flowchart:\n" + ex.getMessage(),
+                        "Load Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                    ex.printStackTrace();
+                }
+            }
+        }
     }
 
     private void exitApplication() {
