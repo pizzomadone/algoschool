@@ -552,8 +552,9 @@ public class FlowchartPanel extends JPanel {
                     0, 0, 15, 15, MERGE);
                 conditionalMergePoints.put(condBlock, mergePoint);
 
-                // Connect source to conditional
-                graph.insertEdge(parent, null, "", source, condBlock);
+                // Connect source to conditional - IMPORTANTE: preserva etichetta e stile originali
+                if (originalLabel == null) originalLabel = "";
+                graph.insertEdge(parent, null, originalLabel, source, condBlock, originalStyle);
 
                 // Create True branch - direttamente al merge point (senza blocchi intermedi)
                 graph.insertEdge(parent, null, "Sì", condBlock, mergePoint, "TRUE_BRANCH");
@@ -580,8 +581,9 @@ public class FlowchartPanel extends JPanel {
                 Object bodyMergePoint = graph.insertVertex(parent, null, "",
                     0, 0, 15, 15, MERGE);
 
-                // Connect source to loop condition
-                graph.insertEdge(parent, null, "", source, loopBlock);
+                // Connect source to loop condition - IMPORTANTE: preserva etichetta e stile originali
+                if (originalLabel == null) originalLabel = "";
+                graph.insertEdge(parent, null, originalLabel, source, loopBlock, originalStyle);
 
                 // Yes branch: enter loop body (GREEN arrow)
                 // Users can insert blocks on this edge
@@ -619,8 +621,9 @@ public class FlowchartPanel extends JPanel {
                 Object bodyMergePoint = graph.insertVertex(parent, null, "",
                     0, 0, 15, 15, MERGE);
 
-                // Connect source to for loop
-                graph.insertEdge(parent, null, "", source, forBlock);
+                // Connect source to for loop - IMPORTANTE: preserva etichetta e stile originali
+                if (originalLabel == null) originalLabel = "";
+                graph.insertEdge(parent, null, originalLabel, source, forBlock, originalStyle);
 
                 // Yes branch: enter loop body (GREEN arrow)
                 graph.insertEdge(parent, null, "Yes", forBlock, bodyMergePoint, "TRUE_BRANCH");
@@ -647,8 +650,9 @@ public class FlowchartPanel extends JPanel {
                 Object doWhileBlock = graph.insertVertex(parent, null, condText,
                     0, 0, 120, 70, DO_WHILE);
 
-                // Connect source to body merge point (body is executed first)
-                graph.insertEdge(parent, null, "", source, bodyMergePoint);
+                // Connect source to body merge point (body is executed first) - IMPORTANTE: preserva etichetta e stile originali
+                if (originalLabel == null) originalLabel = "";
+                graph.insertEdge(parent, null, originalLabel, source, bodyMergePoint, originalStyle);
 
                 // From body, go to condition
                 graph.insertEdge(parent, null, "", bodyMergePoint, doWhileBlock);
