@@ -341,6 +341,18 @@ public class FlowchartEditorApp extends JFrame {
         JMenu editMenu = new JMenu("Edit");
         editMenu.setMnemonic('E');
 
+        JMenuItem undoItem = new JMenuItem("Undo");
+        undoItem.setAccelerator(KeyStroke.getKeyStroke("control Z"));
+        undoItem.addActionListener(e -> flowchartPanel.undo());
+        editMenu.add(undoItem);
+
+        JMenuItem redoItem = new JMenuItem("Redo");
+        redoItem.setAccelerator(KeyStroke.getKeyStroke("control Y"));
+        redoItem.addActionListener(e -> flowchartPanel.redo());
+        editMenu.add(redoItem);
+
+        editMenu.addSeparator();
+
         JMenuItem deleteItem = new JMenuItem("Delete Selected");
         deleteItem.setAccelerator(KeyStroke.getKeyStroke("DELETE"));
         deleteItem.addActionListener(e -> flowchartPanel.deleteSelected());
@@ -401,6 +413,32 @@ public class FlowchartEditorApp extends JFrame {
         newBtn.setToolTipText("Create new flowchart (Start -> End)");
         newBtn.addActionListener(e -> newFlowchart());
         toolBar.add(newBtn);
+
+        toolBar.addSeparator();
+
+        // Create Undo and Redo buttons
+        JButton undoBtn = new JButton("← Indietro");
+        undoBtn.setToolTipText("Undo last change (Ctrl+Z)");
+
+        JButton redoBtn = new JButton("Avanti →");
+        redoBtn.setToolTipText("Redo last undone change (Ctrl+Y)");
+
+        // Add action listeners
+        undoBtn.addActionListener(e -> {
+            flowchartPanel.undo();
+            updateUndoRedoButtons(undoBtn, redoBtn);
+        });
+
+        redoBtn.addActionListener(e -> {
+            flowchartPanel.redo();
+            updateUndoRedoButtons(undoBtn, redoBtn);
+        });
+
+        toolBar.add(undoBtn);
+        toolBar.add(redoBtn);
+
+        // Update button states initially
+        updateUndoRedoButtons(undoBtn, redoBtn);
 
         toolBar.addSeparator();
 
@@ -669,6 +707,14 @@ public class FlowchartEditorApp extends JFrame {
 
     private void exitApplication() {
         System.exit(0);
+    }
+
+    /**
+     * Update the enabled state of undo/redo buttons based on availability
+     */
+    private void updateUndoRedoButtons(JButton undoBtn, JButton redoBtn) {
+        undoBtn.setEnabled(flowchartPanel.canUndo());
+        redoBtn.setEnabled(flowchartPanel.canRedo());
     }
 
     /**

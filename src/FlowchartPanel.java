@@ -5,8 +5,13 @@ import com.mxgraph.model.mxCell;
 import com.mxgraph.model.mxGeometry;
 import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.util.mxConstants;
+import com.mxgraph.util.mxEvent;
+import com.mxgraph.util.mxEventObject;
+import com.mxgraph.util.mxEventSource;
 import com.mxgraph.util.mxPoint;
 import com.mxgraph.util.mxRectangle;
+import com.mxgraph.util.mxUndoManager;
+import com.mxgraph.util.mxUndoableEdit;
 import com.mxgraph.util.mxUtils;
 import com.mxgraph.util.mxXmlUtils;
 import com.mxgraph.view.mxGraph;
@@ -34,6 +39,7 @@ public class FlowchartPanel extends JPanel {
 
     private mxGraph graph;
     private mxGraphComponent graphComponent;
+    private mxUndoManager undoManager;
 
     // Track Start and End cells
     private Object startCell;
@@ -112,6 +118,9 @@ public class FlowchartPanel extends JPanel {
 
         // Setup mouse listeners for edge clicking
         setupMouseListeners();
+
+        // Setup undo/redo manager
+        setupUndoManager();
 
         // Add component listener to reapply layout when component is first shown
         addComponentListener(new ComponentAdapter() {
@@ -1016,6 +1025,87 @@ public class FlowchartPanel extends JPanel {
      */
     public Object getEndCell() {
         return endCell;
+    }
+
+    // ===== UNDO/REDO FUNCTIONALITY =====
+
+    /**
+     * Setup undo/redo manager
+     */
+    private void setupUndoManager() {
+        // Create undo manager
+        undoManager = new mxUndoManager();
+
+        // Add listener to the graph model to record changes
+        graph.getModel().addListener(mxEvent.UNDO, new mxEventSource.mxIEventListener() {
+            @Override
+            public void invoke(Object sender, mxEventObject evt) {
+                undoManager.undoableEditHappened((mxUndoableEdit) evt.getProperty("edit"));
+            }
+        });
+
+        // Enable undo in graph component
+        graphComponent.getGraphControl().addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                // Ctrl+Z for undo
+                if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_Z) {
+                    if (!e.isShiftDown()) {
+                        undo();
+                    } else {
+                        // Ctrl+Shift+Z for redo
+                        redo();
+                    }
+                }
+                // Ctrl+Y for redo (alternative)
+                else if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_Y) {
+                    redo();
+                }
+            }
+        });
+    }
+
+    /**
+     * Undo the last change
+     */
+    public void undo() {
+        if (undoManager != null && undoManager.canUndo()) {
+            undoManager.undo();
+            graphComponent.refresh();
+        }
+    }
+
+    /**
+     * Redo the last undone change
+     */
+    public void redo() {
+        if (undoManager != null && undoManager.canRedo()) {
+            undoManager.redo();
+            graphComponent.refresh();
+        }
+    }
+
+    /**
+     * Check if undo is available
+     */
+    public boolean canUndo() {
+        return undoManager != null && undoManager.canUndo();
+    }
+
+    /**
+     * Check if redo is available
+     */
+    public boolean canRedo() {
+        return undoManager != null && undoManager.canRedo();
+    }
+
+    /**
+     * Clear undo history
+     */
+    public void clearUndoHistory() {
+        if (undoManager != null) {
+            undoManager.clear();
+        }
     }
 
     // ===== SAVE/LOAD FUNCTIONALITY =====
