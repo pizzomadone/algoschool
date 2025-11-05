@@ -1084,11 +1084,16 @@ public class FlowchartPanel extends JPanel {
                 }
             }
 
-            // Apply layout to reorganize
-            applyHierarchicalLayout();
-
         } finally {
             graph.getModel().endUpdate();
         }
+
+        // Reset the layout flag and apply layout after component is ready
+        // This ensures the flowchart is centered correctly
+        initialLayoutApplied = false;
+        SwingUtilities.invokeLater(() -> {
+            applyHierarchicalLayout();
+            initialLayoutApplied = true;
+        });
     }
 }
