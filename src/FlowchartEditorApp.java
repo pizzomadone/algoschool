@@ -14,6 +14,7 @@ public class FlowchartEditorApp extends JFrame {
     private FlowchartPanel flowchartPanel;
     private ExecutionControlPanel controlPanel;
     private OutputPanel outputPanel;
+    private CCodePanel cCodePanel;
     private VariablesPanel variablesPanel;
     private FlowchartInterpreter interpreter;
 
@@ -48,6 +49,7 @@ public class FlowchartEditorApp extends JFrame {
         // Create execution panels
         controlPanel = new ExecutionControlPanel();
         outputPanel = new OutputPanel();
+        cCodePanel = new CCodePanel();
         variablesPanel = new VariablesPanel();
 
         // Create interpreter
@@ -63,10 +65,20 @@ public class FlowchartEditorApp extends JFrame {
         // Setup control panel listener
         setupControlPanel();
 
-        // Create right panel with output and variables
-        JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, outputPanel, variablesPanel);
-        rightSplitPane.setDividerLocation(300);
-        rightSplitPane.setResizeWeight(0.5);
+        // Setup graph model listener for real-time C code generation
+        setupGraphListener();
+
+        // Create right panel with output, C code, and variables (3 panels in vertical)
+        // Top: Output panel
+        // Middle: C Code panel
+        // Bottom: Variables panel
+        JSplitPane middleSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, cCodePanel, variablesPanel);
+        middleSplitPane.setDividerLocation(250);
+        middleSplitPane.setResizeWeight(0.5);
+
+        JSplitPane rightSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, outputPanel, middleSplitPane);
+        rightSplitPane.setDividerLocation(200);
+        rightSplitPane.setResizeWeight(0.33);
 
         // Create main split pane
         JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollPane, rightSplitPane);
@@ -147,6 +159,19 @@ public class FlowchartEditorApp extends JFrame {
                 });
             }
         });
+    }
+
+    private void setupGraphListener() {
+        // Aggiungi un listener al modello del grafo per aggiornare il codice C in real-time
+        flowchartPanel.getGraph().getModel().addListener(com.mxgraph.util.mxEvent.CHANGE,
+            (sender, evt) -> {
+                // Aggiorna il codice C quando il grafo cambia
+                SwingUtilities.invokeLater(() -> updateCCode());
+            }
+        );
+
+        // Genera il codice iniziale
+        SwingUtilities.invokeLater(() -> updateCCode());
     }
 
     private void setupControlPanel() {
@@ -316,6 +341,18 @@ public class FlowchartEditorApp extends JFrame {
         JMenu editMenu = new JMenu("Edit");
         editMenu.setMnemonic('E');
 
+        JMenuItem undoItem = new JMenuItem("Undo");
+        undoItem.setAccelerator(KeyStroke.getKeyStroke("control Z"));
+        undoItem.addActionListener(e -> flowchartPanel.undo());
+        editMenu.add(undoItem);
+
+        JMenuItem redoItem = new JMenuItem("Redo");
+        redoItem.setAccelerator(KeyStroke.getKeyStroke("control Y"));
+        redoItem.addActionListener(e -> flowchartPanel.redo());
+        editMenu.add(redoItem);
+
+        editMenu.addSeparator();
+
         JMenuItem deleteItem = new JMenuItem("Delete Selected");
         deleteItem.setAccelerator(KeyStroke.getKeyStroke("DELETE"));
         deleteItem.addActionListener(e -> flowchartPanel.deleteSelected());
@@ -376,6 +413,32 @@ public class FlowchartEditorApp extends JFrame {
         newBtn.setToolTipText("Create new flowchart (Start -> End)");
         newBtn.addActionListener(e -> newFlowchart());
         toolBar.add(newBtn);
+
+        toolBar.addSeparator();
+
+        // Create Undo and Redo buttons
+        JButton undoBtn = new JButton("← Indietro");
+        undoBtn.setToolTipText("Undo last change (Ctrl+Z)");
+
+        JButton redoBtn = new JButton("Avanti →");
+        redoBtn.setToolTipText("Redo last undone change (Ctrl+Y)");
+
+        // Add action listeners
+        undoBtn.addActionListener(e -> {
+            flowchartPanel.undo();
+            updateUndoRedoButtons(undoBtn, redoBtn);
+        });
+
+        redoBtn.addActionListener(e -> {
+            flowchartPanel.redo();
+            updateUndoRedoButtons(undoBtn, redoBtn);
+        });
+
+        toolBar.add(undoBtn);
+        toolBar.add(redoBtn);
+
+        // Update button states initially
+        updateUndoRedoButtons(undoBtn, redoBtn);
 
         toolBar.addSeparator();
 
@@ -620,6 +683,9 @@ public class FlowchartEditorApp extends JFrame {
                     controlPanel.setStatus("Ready");
                     controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
 
+                    // Aggiorna il codice C dopo il caricamento
+                    updateCCode();
+
                     JOptionPane.showMessageDialog(
                         this,
                         "Flowchart loaded successfully from:\n" + file.getAbsolutePath(),
@@ -641,6 +707,31 @@ public class FlowchartEditorApp extends JFrame {
 
     private void exitApplication() {
         System.exit(0);
+    }
+
+    /**
+     * Update the enabled state of undo/redo buttons based on availability
+     */
+    private void updateUndoRedoButtons(JButton undoBtn, JButton redoBtn) {
+        undoBtn.setEnabled(flowchartPanel.canUndo());
+        redoBtn.setEnabled(flowchartPanel.canRedo());
+    }
+
+    /**
+     * Aggiorna il codice C generato dal flowchart corrente
+     */
+    private void updateCCode() {
+        try {
+            FlowchartToCGenerator generator = new FlowchartToCGenerator(
+                flowchartPanel.getGraph(),
+                flowchartPanel.getStartCell(),
+                flowchartPanel.getEndCell()
+            );
+            String code = generator.generateCode();
+            cCodePanel.setCode(code);
+        } catch (Exception e) {
+            cCodePanel.setCode("// Errore nella generazione del codice:\n// " + e.getMessage());
+        }
     }
 
     public static void main(String[] args) {
