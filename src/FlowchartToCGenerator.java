@@ -372,8 +372,18 @@ public class FlowchartToCGenerator {
     private Object getNextCell(Object cell) {
         Object[] edges = graph.getOutgoingEdges(cell);
         if (edges.length > 0) {
-            mxCell edge = (mxCell) edges[0];
-            return edge.getTarget();
+            // Se ci sono più edge, evita di seguire quelli che puntano a loop già visitati
+            for (Object edge : edges) {
+                mxCell edgeCell = (mxCell) edge;
+                Object target = edgeCell.getTarget();
+                // Salta i loop back (edge che puntano a loop già visitati)
+                if (target != null && isLoopCell(target) && visitedCells.contains(target)) {
+                    continue;
+                }
+                return target;
+            }
+            // Se tutti gli edge puntano a loop visitati, non c'è prossima cella
+            return null;
         }
         return null;
     }
