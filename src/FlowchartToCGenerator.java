@@ -231,8 +231,6 @@ public class FlowchartToCGenerator {
         // Trova il corpo del loop (ramo Yes)
         Object loopBody = findBranchTarget(cell, "Yes");
         if (loopBody != null) {
-            // Rimuovi temporaneamente dal visited per permettere la generazione del corpo
-            visitedCells.remove(cell);
             generateFromCell(loopBody);
         }
 
@@ -259,7 +257,6 @@ public class FlowchartToCGenerator {
         // Trova il corpo del loop (ramo Yes)
         Object loopBody = findBranchTarget(cell, "Yes");
         if (loopBody != null) {
-            visitedCells.remove(cell);
             generateFromCell(loopBody);
         }
 
@@ -289,7 +286,6 @@ public class FlowchartToCGenerator {
             mxCell edge = (mxCell) incomingEdges[0];
             Object bodyStart = edge.getSource();
             if (bodyStart != null && !FlowchartPanel.DO_WHILE.equals(((mxCell) bodyStart).getStyle())) {
-                visitedCells.remove(cell);
                 generateFromCell(bodyStart);
             }
         }
