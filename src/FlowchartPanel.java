@@ -548,7 +548,15 @@ public class FlowchartPanel extends JPanel {
                 // Special handling for conditional blocks
                 String conditionText = JOptionPane.showInputDialog(this,
                     "Inserisci la condizione:", "x > 0");
-                if (conditionText == null || conditionText.trim().isEmpty()) {
+
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (conditionText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+
+                if (conditionText.trim().isEmpty()) {
                     conditionText = "condizione";
                 }
 
@@ -578,7 +586,15 @@ public class FlowchartPanel extends JPanel {
                 // Special handling for WHILE loop blocks
                 String loopText = JOptionPane.showInputDialog(this,
                     "Inserisci la condizione del ciclo WHILE:", "i < n");
-                if (loopText == null || loopText.trim().isEmpty()) {
+
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (loopText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+
+                if (loopText.trim().isEmpty()) {
                     loopText = "condizione";
                 }
 
@@ -609,15 +625,33 @@ public class FlowchartPanel extends JPanel {
                 // For loop: init; condition; increment
                 String initText = JOptionPane.showInputDialog(this,
                     "Inserisci l'inizializzazione del FOR (es. i = 0):", "i = 0");
-                if (initText == null) initText = "i = 0";
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (initText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+                if (initText.trim().isEmpty()) initText = "i = 0";
 
                 String condText = JOptionPane.showInputDialog(this,
                     "Inserisci la condizione del FOR (es. i < n):", "i < n");
-                if (condText == null) condText = "i < n";
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (condText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+                if (condText.trim().isEmpty()) condText = "i < n";
 
                 String incrText = JOptionPane.showInputDialog(this,
                     "Inserisci l'incremento del FOR (es. i = i + 1):", "i = i + 1");
-                if (incrText == null) incrText = "i = i + 1";
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (incrText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+                if (incrText.trim().isEmpty()) incrText = "i = i + 1";
 
                 // Combine into a single string for display
                 String forText = initText + "; " + condText + "; " + incrText;
@@ -647,7 +681,15 @@ public class FlowchartPanel extends JPanel {
                 // Special handling for DO-WHILE loop blocks
                 String condText = JOptionPane.showInputDialog(this,
                     "Inserisci la condizione del DO-WHILE:", "i < n");
-                if (condText == null || condText.trim().isEmpty()) {
+
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (condText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+
+                if (condText.trim().isEmpty()) {
                     condText = "condizione";
                 }
 
@@ -676,7 +718,15 @@ public class FlowchartPanel extends JPanel {
                 // Regular blocks (Assignment, Input, Output)
                 String blockText = JOptionPane.showInputDialog(this,
                     "Enter block text:", getDefaultTextForBlockType(blockType));
-                if (blockText == null || blockText.trim().isEmpty()) {
+
+                // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
+                if (blockText == null) {
+                    if (originalLabel == null) originalLabel = "";
+                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    return;
+                }
+
+                if (blockText.trim().isEmpty()) {
                     blockText = getDefaultTextForBlockType(blockType);
                 }
 
