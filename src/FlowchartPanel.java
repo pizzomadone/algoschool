@@ -1173,6 +1173,20 @@ public class FlowchartPanel extends JPanel {
         if (undoManager != null && undoManager.canUndo()) {
             undoManager.undo();
             graphComponent.refresh();
+
+            // Verifica che START e END esistano ancora dopo l'undo
+            if (!verifyStartEndExist()) {
+                // Se START o END sono stati cancellati, annulla l'undo
+                undoManager.redo();
+                graphComponent.refresh();
+
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Cannot undo: this would remove the Start or End blocks.\nThe flowchart must always have Start and End blocks.",
+                    "Undo Limit Reached",
+                    JOptionPane.WARNING_MESSAGE
+                );
+            }
         }
     }
 
@@ -1434,5 +1448,40 @@ public class FlowchartPanel extends JPanel {
      */
     public FunctionDefinition getFunction(String functionName) {
         return functions.get(functionName);
+    }
+
+    /**
+     * Verifies that START and END blocks still exist in the graph.
+     * Used to prevent undo operations from removing essential blocks.
+     *
+     * @return true if both START and END exist, false otherwise
+     */
+    private boolean verifyStartEndExist() {
+        Object parent = graph.getDefaultParent();
+        Object[] vertices = graph.getChildVertices(parent);
+
+        boolean hasStart = false;
+        boolean hasEnd = false;
+
+        for (Object vertex : vertices) {
+            if (vertex instanceof mxCell) {
+                mxCell cell = (mxCell) vertex;
+                String style = cell.getStyle();
+
+                if (START.equals(style)) {
+                    hasStart = true;
+                    startCell = vertex;  // Update reference
+                } else if (END.equals(style)) {
+                    hasEnd = true;
+                    endCell = vertex;  // Update reference
+                }
+
+                if (hasStart && hasEnd) {
+                    return true;  // Found both, can return early
+                }
+            }
+        }
+
+        return hasStart && hasEnd;
     }
 }
