@@ -791,9 +791,9 @@ public class FlowchartPanel extends JPanel {
             case ASSIGNMENT:
                 return "x = 0";
             case INPUT:
-                return "I: n";
+                return "n";
             case OUTPUT:
-                return "O: n";
+                return "n";
             case CONDITIONAL:
                 return "x > 0";
             case LOOP:
