@@ -18,6 +18,7 @@ public class FlowchartToCGenerator {
     private Map<Object, String> loopLabels;
     private int loopCounter;
     private FlowchartPanel flowchartPanel;  // For accessing function definitions
+    private Map<String, String> variableTypes;  // Track variable types (varName -> type)
 
     public FlowchartToCGenerator(mxGraph graph, Object startCell, Object endCell) {
         this(graph, startCell, endCell, null);
@@ -33,6 +34,7 @@ public class FlowchartToCGenerator {
         this.visitedCells = new HashSet<>();
         this.loopLabels = new HashMap<>();
         this.loopCounter = 0;
+        this.variableTypes = new HashMap<>();
     }
 
     /**
@@ -69,6 +71,19 @@ public class FlowchartToCGenerator {
         // Main function
         appendLine("int main() {");
         indentLevel++;
+
+        // Collect variable types from the flowchart
+        variableTypes.clear();
+        collectVariables(startCell, new HashSet<>());
+
+        // Declare all variables at the beginning
+        for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
+            appendLine(entry.getValue() + " " + entry.getKey() + ";");
+        }
+
+        if (!variableTypes.isEmpty()) {
+            appendLine("");  // Empty line after declarations
+        }
 
         // Genera il corpo del main
         try {
@@ -180,8 +195,19 @@ public class FlowchartToCGenerator {
         // Rimuovi eventuale prefisso "I:" o "I: "
         varName = varName.replaceFirst("^I:\\s*", "");
 
-        appendLine("int " + varName + ";");
-        appendLine("scanf(\"%d\", &" + varName + ");");
+        // Determina il formato in base al tipo della variabile
+        String varType = variableTypes.getOrDefault(varName, "int");
+        String scanfFormat;
+
+        if (varType.equals("char*") || varType.startsWith("char[")) {
+            scanfFormat = "%s";
+        } else if (varType.equals("double")) {
+            scanfFormat = "%lf";
+        } else {
+            scanfFormat = "%d";
+        }
+
+        appendLine("scanf(\"" + scanfFormat + "\", &" + varName + ");");
     }
 
     /**
@@ -196,8 +222,22 @@ public class FlowchartToCGenerator {
         if (outputValue.startsWith("\"") && outputValue.endsWith("\"")) {
             appendLine("printf(" + outputValue + ");");
         } else {
-            // È una variabile o espressione
-            appendLine("printf(\"%d\\n\", " + outputValue + ");");
+            // È una variabile o espressione - determina il formato
+            String format = "%d\\n";  // default int
+
+            // Se è una singola variabile, controlla il suo tipo
+            if (outputValue.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                String varType = variableTypes.get(outputValue);
+                if (varType != null) {
+                    if (varType.equals("char*") || varType.startsWith("char[")) {
+                        format = "%s\\n";
+                    } else if (varType.equals("double")) {
+                        format = "%lf\\n";
+                    }
+                }
+            }
+
+            appendLine("printf(\"" + format + "\", " + outputValue + ");");
         }
     }
 
@@ -470,6 +510,7 @@ public class FlowchartToCGenerator {
         Object savedEnd = this.endCell;
         Set<Object> savedVisited = this.visitedCells;
         Map<Object, String> savedLoopLabels = this.loopLabels;
+        Map<String, String> savedVariableTypes = this.variableTypes;
 
         // Switch to function graph
         this.graph = funcGraph;
@@ -477,6 +518,24 @@ public class FlowchartToCGenerator {
         this.endCell = funcEnd;
         this.visitedCells = new HashSet<>();
         this.loopLabels = new HashMap<>();
+        this.variableTypes = new HashMap<>();
+
+        // Collect variable types from function
+        collectVariables(funcStart, new HashSet<>());
+
+        // Remove parameters from variable declarations (they're already in signature)
+        for (String paramName : paramNames) {
+            variableTypes.remove(paramName);
+        }
+
+        // Declare local variables
+        for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
+            appendLine(entry.getValue() + " " + entry.getKey() + ";");
+        }
+
+        if (!variableTypes.isEmpty()) {
+            appendLine("");  // Empty line after declarations
+        }
 
         // Generate function body
         try {
@@ -491,6 +550,7 @@ public class FlowchartToCGenerator {
         this.endCell = savedEnd;
         this.visitedCells = savedVisited;
         this.loopLabels = savedLoopLabels;
+        this.variableTypes = savedVariableTypes;
 
         indentLevel--;
         appendLine("}");
@@ -554,5 +614,90 @@ public class FlowchartToCGenerator {
         } else {
             appendLine("return " + returnValue + ";");
         }
+    }
+
+    // ===== VARIABLE TYPE INFERENCE =====
+
+    /**
+     * Collects all variables and their types from the flowchart
+     */
+    private void collectVariables(Object cell, Set<Object> visited) {
+        if (cell == null || cell == endCell || visited.contains(cell)) {
+            return;
+        }
+
+        visited.add(cell);
+
+        mxCell mxCell = (mxCell) cell;
+        String style = mxCell.getStyle();
+        String value = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
+
+        // Process assignments to infer types
+        if (FlowchartPanel.ASSIGNMENT.equals(style)) {
+            processAssignmentForTypes(value);
+        } else if (FlowchartPanel.INPUT.equals(style)) {
+            // INPUT blocks create int variables by default
+            String varName = value.trim().replaceFirst("^I:\\s*", "");
+            if (!variableTypes.containsKey(varName)) {
+                variableTypes.put(varName, "int");
+            }
+        }
+
+        // Continue recursively through the graph
+        Object[] edges = graph.getOutgoingEdges(cell);
+        for (Object edge : edges) {
+            mxCell edgeCell = (mxCell) edge;
+            Object target = edgeCell.getTarget();
+            collectVariables(target, visited);
+        }
+    }
+
+    /**
+     * Process an assignment to infer variable type
+     */
+    private void processAssignmentForTypes(String assignment) {
+        // Parse: varName = expression
+        int equalsIndex = assignment.indexOf('=');
+        if (equalsIndex == -1) return;
+
+        String varName = assignment.substring(0, equalsIndex).trim();
+        String expression = assignment.substring(equalsIndex + 1).trim();
+
+        // Skip if it's a function call (will be handled separately)
+        if (varName.isEmpty()) return;
+
+        // Infer type from expression
+        String type = inferType(expression);
+
+        // Only set type if not already set (first assignment wins)
+        if (!variableTypes.containsKey(varName)) {
+            variableTypes.put(varName, type);
+        }
+    }
+
+    /**
+     * Infers C type from an expression
+     */
+    private String inferType(String expression) {
+        expression = expression.trim();
+
+        // String literal
+        if (expression.startsWith("\"") && expression.endsWith("\"")) {
+            return "char*";
+        }
+
+        // Floating point number
+        if (expression.matches("-?\\d+\\.\\d+.*")) {
+            return "double";
+        }
+
+        // Integer
+        if (expression.matches("-?\\d+.*")) {
+            return "int";
+        }
+
+        // Function call or expression with existing variables
+        // Default to int
+        return "int";
     }
 }
