@@ -857,7 +857,8 @@ public class FlowchartEditorApp extends JFrame {
             FlowchartToCGenerator generator = new FlowchartToCGenerator(
                 currentFlowchartPanel.getGraph(),
                 currentFlowchartPanel.getStartCell(),
-                currentFlowchartPanel.getEndCell()
+                currentFlowchartPanel.getEndCell(),
+                mainFlowchartPanel  // Pass main panel for function access
             );
             String code = generator.generateCode();
             cCodePanel.setCode(code);
