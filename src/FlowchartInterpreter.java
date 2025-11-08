@@ -26,6 +26,10 @@ public class FlowchartInterpreter {
     // Stack per gestire i loop
     private Stack<LoopContext> loopStack;
 
+    // Function management
+    private Stack<FunctionContext> callStack;
+    private FlowchartPanel flowchartPanel;  // Reference to access function definitions
+
     // Pattern per riconoscere le operazioni
     private static final Pattern ASSIGNMENT_PATTERN = Pattern.compile("(.+?)\\s*=\\s*(.+)");
     private static final Pattern INPUT_PATTERN = Pattern.compile("(?i)(?:I\\s*:|input)\\s*:?\\s*(.+)");
@@ -53,12 +57,18 @@ public class FlowchartInterpreter {
     }
 
     public FlowchartInterpreter(mxGraph graph, Object startCell, Object endCell) {
+        this(graph, startCell, endCell, null);
+    }
+
+    public FlowchartInterpreter(mxGraph graph, Object startCell, Object endCell, FlowchartPanel flowchartPanel) {
         this.graph = graph;
         this.startCell = startCell;
         this.endCell = endCell;
+        this.flowchartPanel = flowchartPanel;
         this.variables = new HashMap<>();
         this.output = new StringBuilder();
         this.loopStack = new Stack<>();
+        this.callStack = new Stack<>();
         this.isRunning = false;
         this.isPaused = false;
     }
@@ -246,6 +256,11 @@ public class FlowchartInterpreter {
                 output.append(result ? " (repeating loop body)\n" : " (exiting loop)\n");
                 moveToLoopBranch(cell, result);
 
+            } else if (FlowchartPanel.RETURN.equals(style)) {
+                // Blocco Return - restituisci valore dalla funzione
+                executeReturn(value);
+                // Non chiamare moveToNext, executeReturn gestisce il salto
+
             } else if (FlowchartPanel.MERGE.equals(style)) {
                 // Merge point - passa semplicemente al prossimo
                 moveToNext(cell);
@@ -277,7 +292,7 @@ public class FlowchartInterpreter {
 
             output.append("▶ ASSIGNMENT: Evaluating '").append(expression).append("'\n");
             Object result = evaluateExpression(expression);
-            variables.put(varName, result);
+            setVariable(varName, result);
             output.append("  → Variable '").append(varName).append("' = ").append(result).append("\n");
         } else {
             // Se non è un assegnamento, prova a valutare come espressione
@@ -349,17 +364,17 @@ public class FlowchartInterpreter {
                 try {
                     // Prova a convertire in numero
                     if (value.matches("-?\\d+")) {
-                        variables.put(varName, Integer.parseInt(value));
+                        setVariable(varName, Integer.parseInt(value));
                         output.append("  → User entered: ").append(value).append(" (stored as Integer)\n");
                     } else if (value.matches("-?\\d+\\.\\d+")) {
-                        variables.put(varName, Double.parseDouble(value));
+                        setVariable(varName, Double.parseDouble(value));
                         output.append("  → User entered: ").append(value).append(" (stored as Double)\n");
                     } else {
-                        variables.put(varName, value);
+                        setVariable(varName, value);
                         output.append("  → User entered: \"").append(value).append("\" (stored as String)\n");
                     }
                 } catch (Exception e) {
-                    variables.put(varName, value);
+                    setVariable(varName, value);
                     output.append("  → User entered: \"").append(value).append("\"\n");
                 }
 
@@ -475,8 +490,9 @@ public class FlowchartInterpreter {
         expression = expression.trim();
 
         // Se è una variabile, restituisci il suo valore
-        if (variables.containsKey(expression)) {
-            return variables.get(expression);
+        Object varValue = getVariable(expression);
+        if (varValue != null) {
+            return varValue;
         }
 
         // Se è un numero
@@ -495,6 +511,11 @@ public class FlowchartInterpreter {
             return expression.substring(1, expression.length() - 1);
         }
 
+        // Controlla se è una chiamata di funzione: nomeFunzione(arg1, arg2, ...)
+        if (expression.matches("\\w+\\s*\\(.+\\)")) {
+            return evaluateFunctionCall(expression);
+        }
+
         // Prova a valutare espressioni aritmetiche semplici
         try {
             return evaluateArithmeticExpression(expression);
@@ -506,7 +527,8 @@ public class FlowchartInterpreter {
 
     private Object evaluateArithmeticExpression(String expression) {
         // Sostituisci le variabili con i loro valori
-        for (Map.Entry<String, Object> entry : variables.entrySet()) {
+        Map<String, Object> allVars = getAllVariables();
+        for (Map.Entry<String, Object> entry : allVars.entrySet()) {
             if (entry.getValue() instanceof Number) {
                 expression = expression.replaceAll("\\b" + entry.getKey() + "\\b",
                     String.valueOf(entry.getValue()));
@@ -680,7 +702,7 @@ public class FlowchartInterpreter {
     }
 
     public Map<String, Object> getVariables() {
-        return new HashMap<>(variables);
+        return getAllVariables();
     }
 
     public String getOutput() {
@@ -697,5 +719,243 @@ public class FlowchartInterpreter {
 
     public boolean isPaused() {
         return isPaused;
+    }
+
+    // ===== FUNCTION CALL MANAGEMENT =====
+
+    /**
+     * Evaluates a function call expression and returns the result.
+     * Format: functionName(arg1, arg2, ...)
+     */
+    private Object evaluateFunctionCall(String expression) {
+        // Parse function name and arguments
+        int openParen = expression.indexOf('(');
+        int closeParen = expression.lastIndexOf(')');
+
+        if (openParen == -1 || closeParen == -1) {
+            throw new RuntimeException("Invalid function call syntax: " + expression);
+        }
+
+        String functionName = expression.substring(0, openParen).trim();
+        String argsStr = expression.substring(openParen + 1, closeParen).trim();
+
+        // Parse arguments
+        List<Object> argValues = new ArrayList<>();
+        if (!argsStr.isEmpty()) {
+            String[] args = argsStr.split(",");
+            for (String arg : args) {
+                argValues.add(evaluateExpression(arg.trim()));
+            }
+        }
+
+        // Execute the function call
+        return executeFunctionCall(functionName, argValues);
+    }
+
+    /**
+     * Executes a function call.
+     */
+    private Object executeFunctionCall(String functionName, List<Object> argValues) {
+        if (flowchartPanel == null) {
+            throw new RuntimeException("FlowchartPanel reference not set, cannot call functions");
+        }
+
+        // Get function definition
+        FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+        if (funcDef == null) {
+            throw new RuntimeException("Function '" + functionName + "' not found");
+        }
+
+        // Get INPUT blocks from the function to determine parameter names
+        mxGraph funcGraph = funcDef.getFunctionGraph();
+        Object funcStart = funcDef.getStartCell();
+        List<String> paramNames = getFunctionParameterNames(funcGraph, funcStart);
+
+        // Validate argument count
+        if (argValues.size() != paramNames.size()) {
+            throw new RuntimeException("Function '" + functionName + "' expects " +
+                paramNames.size() + " parameters but got " + argValues.size());
+        }
+
+        // Create function context
+        FunctionContext context = new FunctionContext(functionName, currentCell, null);
+
+        // Set parameter values in local variables
+        for (int i = 0; i < paramNames.size(); i++) {
+            context.setLocalVariable(paramNames.get(i), argValues.get(i));
+        }
+
+        // Push context onto call stack
+        callStack.push(context);
+
+        // Switch to function graph
+        mxGraph previousGraph = graph;
+        graph = funcGraph;
+
+        // Execute function starting from its start cell
+        Object funcStartNext = getNextCell(funcStart);
+        currentCell = funcStartNext;
+
+        output.append("▶ CALLING FUNCTION: ").append(functionName).append("(");
+        for (int i = 0; i < argValues.size(); i++) {
+            if (i > 0) output.append(", ");
+            output.append(paramNames.get(i)).append("=").append(argValues.get(i));
+        }
+        output.append(")\n");
+
+        // Execute function body until RETURN or END
+        while (currentCell != null && currentCell != funcDef.getEndCell()) {
+            mxCell cell = (mxCell) currentCell;
+            String style = cell.getStyle();
+
+            if (FlowchartPanel.RETURN.equals(style)) {
+                // Return statement encountered
+                break;
+            }
+
+            // Execute current step
+            executeStep();
+
+            // Check if we've reached the end or encountered an error
+            if (!isRunning || currentCell == null) {
+                break;
+            }
+        }
+
+        // Pop context and restore graph
+        FunctionContext returnedContext = callStack.pop();
+        graph = previousGraph;
+
+        // Get return value (stored in a special variable or null for procedures)
+        Object returnValue = returnedContext.getLocalVariable("__return_value__");
+        if (returnValue == null) {
+            returnValue = 0; // Default return value for procedures
+        }
+
+        output.append("▶ FUNCTION ").append(functionName).append(" RETURNED: ").append(returnValue).append("\n");
+
+        return returnValue;
+    }
+
+    /**
+     * Gets parameter names from INPUT blocks at the start of a function.
+     */
+    private List<String> getFunctionParameterNames(mxGraph funcGraph, Object funcStart) {
+        List<String> params = new ArrayList<>();
+        Object current = getNextCell(funcStart);
+
+        while (current != null) {
+            mxCell cell = (mxCell) current;
+            String style = cell.getStyle();
+
+            if (FlowchartPanel.INPUT.equals(style)) {
+                // Extract parameter name from INPUT block
+                String value = (String) cell.getValue();
+                Matcher matcher = INPUT_PATTERN.matcher(value);
+                if (matcher.matches()) {
+                    String varName = matcher.group(1).trim();
+                    params.add(varName);
+                } else {
+                    params.add(value.trim());
+                }
+                current = getNextCell(current);
+            } else {
+                // No more INPUT blocks
+                break;
+            }
+        }
+
+        return params;
+    }
+
+    /**
+     * Gets the next cell from the current cell.
+     */
+    private Object getNextCell(Object cell) {
+        mxCell mxCell = (mxCell) cell;
+        Object[] edges = graph.getOutgoingEdges(mxCell);
+        if (edges != null && edges.length > 0) {
+            return ((mxCell) edges[0]).getTarget();
+        }
+        return null;
+    }
+
+    /**
+     * Executes a RETURN statement.
+     */
+    private void executeReturn(String value) {
+        // Parse return value
+        Object returnValue = null;
+
+        if (value != null && !value.trim().isEmpty()) {
+            // Extract value after "return"
+            String returnExpr = value.trim();
+            if (returnExpr.toLowerCase().startsWith("return")) {
+                returnExpr = returnExpr.substring(6).trim();
+            }
+
+            if (!returnExpr.isEmpty()) {
+                returnValue = evaluateExpression(returnExpr);
+            }
+        }
+
+        output.append("▶ RETURN: ").append(returnValue).append("\n");
+
+        // If we're in a function, store return value and return to caller
+        if (!callStack.isEmpty()) {
+            FunctionContext context = callStack.peek();
+            context.setLocalVariable("__return_value__", returnValue);
+
+            // Return to caller
+            currentCell = context.getReturnPoint();
+        } else {
+            // Return in main - just stop execution
+            currentCell = endCell;
+        }
+    }
+
+    /**
+     * Gets a variable value, checking local scope first, then global.
+     */
+    private Object getVariable(String name) {
+        // Check local scope first
+        if (!callStack.isEmpty()) {
+            FunctionContext context = callStack.peek();
+            if (context.hasLocalVariable(name)) {
+                return context.getLocalVariable(name);
+            }
+        }
+
+        // Check global scope
+        return variables.get(name);
+    }
+
+    /**
+     * Sets a variable value in the current scope.
+     */
+    private void setVariable(String name, Object value) {
+        // If we're in a function, set in local scope
+        if (!callStack.isEmpty()) {
+            FunctionContext context = callStack.peek();
+            context.setLocalVariable(name, value);
+        } else {
+            // Set in global scope
+            variables.put(name, value);
+        }
+    }
+
+    /**
+     * Gets all visible variables (local + global).
+     */
+    private Map<String, Object> getAllVariables() {
+        Map<String, Object> allVars = new HashMap<>(variables); // Start with global
+
+        // Override with local variables if in a function
+        if (!callStack.isEmpty()) {
+            FunctionContext context = callStack.peek();
+            allVars.putAll(context.getLocalVariables());
+        }
+
+        return allVars;
     }
 }

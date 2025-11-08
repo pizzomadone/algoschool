@@ -52,11 +52,12 @@ public class FlowchartEditorApp extends JFrame {
         cCodePanel = new CCodePanel();
         variablesPanel = new VariablesPanel();
 
-        // Create interpreter
+        // Create interpreter with flowchartPanel reference for function support
         interpreter = new FlowchartInterpreter(
             flowchartPanel.getGraph(),
             flowchartPanel.getStartCell(),
-            flowchartPanel.getEndCell()
+            flowchartPanel.getEndCell(),
+            flowchartPanel
         );
 
         // Setup interpreter listener
@@ -385,6 +386,28 @@ public class FlowchartEditorApp extends JFrame {
         viewMenu.add(resetZoomItem);
 
         menuBar.add(viewMenu);
+
+        // Functions menu
+        JMenu functionsMenu = new JMenu("Functions");
+        functionsMenu.setMnemonic('F');
+
+        JMenuItem newFunctionItem = new JMenuItem("New Function...");
+        newFunctionItem.setAccelerator(KeyStroke.getKeyStroke("control shift F"));
+        newFunctionItem.addActionListener(e -> createNewFunction());
+        functionsMenu.add(newFunctionItem);
+
+        JMenuItem manageFunctionsItem = new JMenuItem("Manage Functions...");
+        manageFunctionsItem.addActionListener(e -> manageFunctions());
+        functionsMenu.add(manageFunctionsItem);
+
+        functionsMenu.addSeparator();
+
+        JMenuItem switchToMainItem = new JMenuItem("Switch to Main");
+        switchToMainItem.setAccelerator(KeyStroke.getKeyStroke("control M"));
+        switchToMainItem.addActionListener(e -> switchToMain());
+        functionsMenu.add(switchToMainItem);
+
+        menuBar.add(functionsMenu);
 
         // Help menu
         JMenu helpMenu = new JMenu("Help");
@@ -731,6 +754,168 @@ public class FlowchartEditorApp extends JFrame {
             cCodePanel.setCode(code);
         } catch (Exception e) {
             cCodePanel.setCode("// Errore nella generazione del codice:\n// " + e.getMessage());
+        }
+    }
+
+    // ===== FUNCTION MANAGEMENT METHODS =====
+
+    private void createNewFunction() {
+        String functionName = JOptionPane.showInputDialog(
+            this,
+            "Enter function name:",
+            "New Function",
+            JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (functionName == null || functionName.trim().isEmpty()) {
+            return; // User cancelled
+        }
+
+        functionName = functionName.trim();
+
+        // Validate function name
+        if (!functionName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Invalid function name. Use only letters, numbers, and underscores.\nMust start with a letter or underscore.",
+                "Invalid Name",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        // Create the function
+        if (flowchartPanel.createFunction(functionName)) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Function '" + functionName + "' created successfully!",
+                "Success",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+
+            // Ask if user wants to switch to the new function
+            int choice = JOptionPane.showConfirmDialog(
+                this,
+                "Do you want to switch to the new function?",
+                "Switch to Function",
+                JOptionPane.YES_NO_OPTION
+            );
+
+            if (choice == JOptionPane.YES_OPTION) {
+                switchToFunction(functionName);
+            }
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Failed to create function. Function name might already exist.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    private void manageFunctions() {
+        Map<String, FunctionDefinition> functions = flowchartPanel.getFunctions();
+
+        if (functions.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No functions defined yet. Create one using Functions > New Function.",
+                "No Functions",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        // Create a list of function names
+        String[] functionNames = functions.keySet().toArray(new String[0]);
+
+        // Show selection dialog
+        String selected = (String) JOptionPane.showInputDialog(
+            this,
+            "Select a function to manage:",
+            "Manage Functions",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            functionNames,
+            functionNames[0]
+        );
+
+        if (selected == null) {
+            return; // User cancelled
+        }
+
+        // Show options for the selected function
+        String[] options = {"Switch to Function", "Delete Function", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(
+            this,
+            "What do you want to do with function '" + selected + "'?",
+            "Function Options",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+            null,
+            options,
+            options[0]
+        );
+
+        if (choice == 0) {
+            // Switch to function
+            switchToFunction(selected);
+        } else if (choice == 1) {
+            // Delete function
+            int confirm = JOptionPane.showConfirmDialog(
+                this,
+                "Are you sure you want to delete function '" + selected + "'?",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+            );
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                if (flowchartPanel.deleteFunction(selected)) {
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Function '" + selected + "' deleted successfully.",
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                } else {
+                    JOptionPane.showMessageDialog(
+                        this,
+                        "Failed to delete function.",
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                }
+            }
+        }
+    }
+
+    private void switchToFunction(String functionName) {
+        if (flowchartPanel.switchToContext(functionName)) {
+            setTitle("Flowchart Editor - Function: " + functionName);
+            updateCCode(); // Update C code for the new context
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Failed to switch to function '" + functionName + "'.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    private void switchToMain() {
+        if (flowchartPanel.switchToContext("main")) {
+            setTitle("Flowchart Editor - Main");
+            updateCCode(); // Update C code for main
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Failed to switch to main.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
         }
     }
 

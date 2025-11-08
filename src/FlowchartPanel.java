@@ -48,6 +48,13 @@ public class FlowchartPanel extends JPanel {
     // Flag to track if initial layout has been applied
     private boolean initialLayoutApplied = false;
 
+    // Function management
+    private Map<String, FunctionDefinition> functions = new HashMap<>();
+    private String currentContext = "main";  // "main" or function name
+    private mxGraph mainGraph = null;  // Separate reference to main graph
+    private Object mainStartCell = null;
+    private Object mainEndCell = null;
+
     // Block type constants
     public static final String ASSIGNMENT = "ASSIGNMENT";  // Assignment block (rectangle)
     public static final String INPUT = "INPUT";  // Input block (parallelogram with I)
@@ -59,6 +66,7 @@ public class FlowchartPanel extends JPanel {
     public static final String START = "START";
     public static final String END = "END";
     public static final String MERGE = "MERGE";  // Merge point for conditionals
+    public static final String RETURN = "RETURN";  // Return statement for functions
 
     @Deprecated
     public static final String PROCESS = ASSIGNMENT;  // Deprecated: use ASSIGNMENT
@@ -93,6 +101,9 @@ public class FlowchartPanel extends JPanel {
         graph.setConnectableEdges(false);
         graph.setCellsDisconnectable(false);
         graph.setCellsMovable(false);  // FIXED: Blocks are now non-movable
+
+        // Save reference to main graph
+        mainGraph = graph;
 
         // Setup custom styles for flowchart blocks
         setupStyles();
@@ -253,6 +264,17 @@ public class FlowchartPanel extends JPanel {
         mergeStyle.put(mxConstants.STYLE_FONTSIZE, 1);
         stylesheet.putCellStyle(MERGE, mergeStyle);
 
+        // Return block style (rectangle, orange)
+        Map<String, Object> returnStyle = new HashMap<>();
+        returnStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
+        returnStyle.put(mxConstants.STYLE_FILLCOLOR, "#FFD7A3");
+        returnStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        returnStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        returnStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        returnStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        returnStyle.put(mxConstants.STYLE_ROUNDED, false);
+        stylesheet.putCellStyle(RETURN, returnStyle);
+
         // ============== CORREZIONE DEGLI STILI PER GLI ARCHI ==============
         // Versione semplificata che funziona con tutte le versioni di JGraphX
         
@@ -307,6 +329,10 @@ public class FlowchartPanel extends JPanel {
             // Create start and end nodes
             startCell = graph.insertVertex(parent, null, "Start", 300, 50, 100, 50, START);
             endCell = graph.insertVertex(parent, null, "End", 300, 450, 100, 50, END);
+
+            // Save main start/end cells
+            mainStartCell = startCell;
+            mainEndCell = endCell;
 
             // Create initial edge between start and end
             graph.insertEdge(parent, null, "", startCell, endCell);
@@ -808,6 +834,12 @@ public class FlowchartPanel extends JPanel {
 
         menu.addSeparator();
 
+        JMenuItem returnItem = new JMenuItem("Insert Return Block");
+        returnItem.addActionListener(e -> insertBlockOnEdge(edge, RETURN));
+        menu.add(returnItem);
+
+        menu.addSeparator();
+
         JMenuItem layoutItem = new JMenuItem("Re-apply Layout");
         layoutItem.addActionListener(e -> applyHierarchicalLayout());
         menu.add(layoutItem);
@@ -852,6 +884,8 @@ public class FlowchartPanel extends JPanel {
                 return "Start";
             case END:
                 return "End";
+            case RETURN:
+                return "return x";
             default:
                 return "Block";
         }
@@ -1256,5 +1290,149 @@ public class FlowchartPanel extends JPanel {
             applyHierarchicalLayout();
             initialLayoutApplied = true;
         });
+    }
+
+    // ===== FUNCTION MANAGEMENT =====
+
+    /**
+     * Creates a new function with the given name.
+     *
+     * @param functionName Name of the function
+     * @return true if created successfully, false if function already exists
+     */
+    public boolean createFunction(String functionName) {
+        if (functionName == null || functionName.trim().isEmpty()) {
+            return false;
+        }
+
+        if (functions.containsKey(functionName) || "main".equals(functionName)) {
+            return false; // Function already exists or name is reserved
+        }
+
+        FunctionDefinition functionDef = new FunctionDefinition(functionName);
+
+        // Initialize the function graph with styles
+        mxGraph funcGraph = functionDef.getFunctionGraph();
+        funcGraph.setStylesheet(graph.getStylesheet()); // Copy styles from main graph
+
+        // Create Start and End blocks for the function
+        Object parent = funcGraph.getDefaultParent();
+        funcGraph.getModel().beginUpdate();
+        try {
+            Object funcStart = funcGraph.insertVertex(parent, null, "Start", 300, 50, 100, 50, START);
+            Object funcEnd = funcGraph.insertVertex(parent, null, "End", 300, 450, 100, 50, END);
+            funcGraph.insertEdge(parent, null, "", funcStart, funcEnd);
+
+            functionDef.setStartCell(funcStart);
+            functionDef.setEndCell(funcEnd);
+        } finally {
+            funcGraph.getModel().endUpdate();
+        }
+
+        functions.put(functionName, functionDef);
+        return true;
+    }
+
+    /**
+     * Deletes a function.
+     *
+     * @param functionName Name of the function to delete
+     * @return true if deleted successfully, false if function doesn't exist
+     */
+    public boolean deleteFunction(String functionName) {
+        if (!functions.containsKey(functionName)) {
+            return false;
+        }
+
+        functions.remove(functionName);
+
+        // If we're currently viewing this function, switch back to main
+        if (currentContext.equals(functionName)) {
+            switchToContext("main");
+        }
+
+        return true;
+    }
+
+    /**
+     * Switches the current context to main or a function.
+     *
+     * @param contextName "main" or a function name
+     * @return true if switched successfully, false if context doesn't exist
+     */
+    public boolean switchToContext(String contextName) {
+        if ("main".equals(contextName)) {
+            // Save current graph state if we're in a function
+            if (!"main".equals(currentContext)) {
+                FunctionDefinition currentFunc = functions.get(currentContext);
+                if (currentFunc != null) {
+                    // The function graph is already up to date
+                }
+            }
+
+            // Switch to main
+            currentContext = "main";
+            graph = mainGraph;
+            startCell = mainStartCell;
+            endCell = mainEndCell;
+
+            // Update the graphComponent to display the main graph
+            graphComponent.setGraph(mainGraph);
+            graphComponent.refresh();
+
+            return true;
+
+        } else {
+            // Switch to a function
+            FunctionDefinition funcDef = functions.get(contextName);
+            if (funcDef == null) {
+                return false; // Function doesn't exist
+            }
+
+            // Save current graph state if we're in main
+            if ("main".equals(currentContext)) {
+                // Main graph is already up to date
+            }
+
+            // Switch to function
+            currentContext = contextName;
+            graph = funcDef.getFunctionGraph();
+            startCell = funcDef.getStartCell();
+            endCell = funcDef.getEndCell();
+
+            // Update the graphComponent to display the function graph
+            graphComponent.setGraph(funcDef.getFunctionGraph());
+            graphComponent.refresh();
+
+            return true;
+        }
+    }
+
+    /**
+     * Gets the current context name.
+     *
+     * @return "main" or the name of the current function
+     */
+    public String getCurrentContext() {
+        return currentContext;
+    }
+
+    /**
+     * Gets all defined functions.
+     *
+     * @return Map of function names to function definitions
+     */
+    public Map<String, FunctionDefinition> getFunctions() {
+        return functions;
+    }
+
+    /**
+     * Gets a specific function definition.
+     *
+     * @param functionName Name of the function
+     * @return FunctionDefinition or null if not found
+     */
+    public FunctionDefinition getFunction(String functionName) {
+        return functions.get(functionName);
     }
 }
