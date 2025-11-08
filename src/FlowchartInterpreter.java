@@ -489,13 +489,7 @@ public class FlowchartInterpreter {
     private Object evaluateExpression(String expression) {
         expression = expression.trim();
 
-        // Se è una variabile, restituisci il suo valore
-        Object varValue = getVariable(expression);
-        if (varValue != null) {
-            return varValue;
-        }
-
-        // Se è un numero
+        // Se è un numero, valutalo prima di controllare le variabili
         try {
             if (expression.matches("-?\\d+")) {
                 return Integer.parseInt(expression);
@@ -516,13 +510,24 @@ public class FlowchartInterpreter {
             return evaluateFunctionCall(expression);
         }
 
-        // Prova a valutare espressioni aritmetiche semplici
+        // Prova a valutare espressioni aritmetiche semplici (potrebbero contenere variabili)
         try {
-            return evaluateArithmeticExpression(expression);
+            Object arithmeticResult = evaluateArithmeticExpression(expression);
+            // Se il risultato è diverso dall'espressione originale, è stata valutata con successo
+            if (arithmeticResult != null && !arithmeticResult.toString().equals(expression)) {
+                return arithmeticResult;
+            }
         } catch (Exception e) {
-            // Se non riesce, restituisci come stringa
-            return expression;
+            // Non è un'espressione aritmetica valida
         }
+
+        // Se è una variabile, restituisci il suo valore
+        if (hasVariable(expression)) {
+            return getVariable(expression);
+        }
+
+        // Se arriviamo qui, è una variabile non dichiarata o espressione non valida
+        throw new RuntimeException("Variable '" + expression + "' is not defined");
     }
 
     private Object evaluateArithmeticExpression(String expression) {
@@ -928,6 +933,22 @@ public class FlowchartInterpreter {
 
         // Check global scope
         return variables.get(name);
+    }
+
+    /**
+     * Checks if a variable exists in the current scope (local or global).
+     */
+    private boolean hasVariable(String name) {
+        // Check local scope first
+        if (!callStack.isEmpty()) {
+            FunctionContext context = callStack.peek();
+            if (context.hasLocalVariable(name)) {
+                return true;
+            }
+        }
+
+        // Check global scope
+        return variables.containsKey(name);
     }
 
     /**
