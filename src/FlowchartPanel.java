@@ -680,6 +680,16 @@ public class FlowchartPanel extends JPanel {
                     blockText = getDefaultTextForBlockType(blockType);
                 }
 
+                // Per blocchi INPUT, valida che il nome variabile non contenga spazi multipli
+                if (INPUT.equals(blockType)) {
+                    String varPart = blockText.replaceFirst("^I:\\s*", "").trim();
+                    if (varPart.contains(" ")) {
+                        // Sostituisci spazi con underscore nel nome della variabile
+                        String cleanVar = varPart.replaceAll("\\s+", "_");
+                        blockText = "I: " + cleanVar;
+                    }
+                }
+
                 // Determine dimensions based on type
                 int width = 140;
                 int height = 60;

@@ -74,8 +74,8 @@ public class FlowchartToCGenerator {
             return;
         }
 
-        // Evita cicli infiniti (tranne per i loop)
-        if (visitedCells.contains(cell) && !isLoopCell(cell)) {
+        // Evita cicli infiniti - se la cella è già stata visitata, non processarla di nuovo
+        if (visitedCells.contains(cell)) {
             return;
         }
 
@@ -157,8 +157,10 @@ public class FlowchartToCGenerator {
         // Rimuovi eventuale prefisso "I:" o "I: "
         varName = varName.replaceFirst("^I:\\s*", "");
 
+        // Valida che il nome della variabile non contenga spazi
+        varName = varName.replaceAll("\\s+", "_");
+
         appendLine("int " + varName + ";");
-        appendLine("printf(\"Inserisci " + varName + ": \");");
         appendLine("scanf(\"%d\", &" + varName + ");");
     }
 
