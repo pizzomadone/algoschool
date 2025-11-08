@@ -56,6 +56,23 @@ public class FlowchartEditorApp extends JFrame {
         // Add tab change listener to update interpreter when switching tabs
         tabbedPane.addChangeListener(e -> onTabChanged());
 
+        // Add mouse listener for right-click on tabs to delete functions
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                    if (tabIndex >= 0) {
+                        String tabTitle = tabbedPane.getTitleAt(tabIndex);
+                        // Only show delete option for function tabs (not Main)
+                        if (!"Main".equals(tabTitle)) {
+                            showTabContextMenu(e, tabIndex, tabTitle);
+                        }
+                    }
+                }
+            }
+        });
+
         // Create execution panels
         controlPanel = new ExecutionControlPanel();
         outputPanel = new OutputPanel();
@@ -911,6 +928,64 @@ public class FlowchartEditorApp extends JFrame {
             JOptionPane.showMessageDialog(
                 this,
                 "Failed to create function.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    /**
+     * Shows a context menu when right-clicking on a function tab
+     */
+    private void showTabContextMenu(MouseEvent e, int tabIndex, String functionName) {
+        JPopupMenu popup = new JPopupMenu();
+
+        JMenuItem deleteItem = new JMenuItem("🗑️ Delete Function '" + functionName + "'");
+        deleteItem.addActionListener(ev -> deleteFunction(tabIndex, functionName));
+        popup.add(deleteItem);
+
+        popup.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    /**
+     * Deletes a function and its tab
+     */
+    private void deleteFunction(int tabIndex, String functionName) {
+        int confirm = JOptionPane.showConfirmDialog(
+            this,
+            "Are you sure you want to delete function '" + functionName + "'?\nThis action cannot be undone.",
+            "Confirm Delete",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        // Delete function from main panel
+        if (mainFlowchartPanel.deleteFunction(functionName)) {
+            // Remove from function panels map
+            functionPanels.remove(functionName);
+
+            // Remove the tab
+            tabbedPane.removeTabAt(tabIndex);
+
+            // If we just deleted the current tab, switch to Main
+            if (currentFlowchartPanel != mainFlowchartPanel && !functionPanels.containsValue(currentFlowchartPanel)) {
+                tabbedPane.setSelectedIndex(0); // Switch to Main tab
+            }
+
+            JOptionPane.showMessageDialog(
+                this,
+                "Function '" + functionName + "' deleted successfully.",
+                "Success",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Failed to delete function '" + functionName + "'.",
                 "Error",
                 JOptionPane.ERROR_MESSAGE
             );
