@@ -74,8 +74,8 @@ public class FlowchartToCGenerator {
             return;
         }
 
-        // Evita cicli infiniti (tranne per i loop)
-        if (visitedCells.contains(cell) && !isLoopCell(cell)) {
+        // Evita cicli infiniti - se la cella è già stata visitata, non processarla di nuovo
+        if (visitedCells.contains(cell)) {
             return;
         }
 
@@ -158,7 +158,6 @@ public class FlowchartToCGenerator {
         varName = varName.replaceFirst("^I:\\s*", "");
 
         appendLine("int " + varName + ";");
-        appendLine("printf(\"Inserisci " + varName + ": \");");
         appendLine("scanf(\"%d\", &" + varName + ");");
     }
 
@@ -231,8 +230,6 @@ public class FlowchartToCGenerator {
         // Trova il corpo del loop (ramo Yes)
         Object loopBody = findBranchTarget(cell, "Yes");
         if (loopBody != null) {
-            // Rimuovi temporaneamente dal visited per permettere la generazione del corpo
-            visitedCells.remove(cell);
             generateFromCell(loopBody);
         }
 
@@ -259,7 +256,6 @@ public class FlowchartToCGenerator {
         // Trova il corpo del loop (ramo Yes)
         Object loopBody = findBranchTarget(cell, "Yes");
         if (loopBody != null) {
-            visitedCells.remove(cell);
             generateFromCell(loopBody);
         }
 
@@ -289,7 +285,6 @@ public class FlowchartToCGenerator {
             mxCell edge = (mxCell) incomingEdges[0];
             Object bodyStart = edge.getSource();
             if (bodyStart != null && !FlowchartPanel.DO_WHILE.equals(((mxCell) bodyStart).getStyle())) {
-                visitedCells.remove(cell);
                 generateFromCell(bodyStart);
             }
         }
@@ -372,8 +367,18 @@ public class FlowchartToCGenerator {
     private Object getNextCell(Object cell) {
         Object[] edges = graph.getOutgoingEdges(cell);
         if (edges.length > 0) {
-            mxCell edge = (mxCell) edges[0];
-            return edge.getTarget();
+            // Se ci sono più edge, evita di seguire quelli che puntano a loop già visitati
+            for (Object edge : edges) {
+                mxCell edgeCell = (mxCell) edge;
+                Object target = edgeCell.getTarget();
+                // Salta i loop back (edge che puntano a loop già visitati)
+                if (target != null && isLoopCell(target) && visitedCells.contains(target)) {
+                    continue;
+                }
+                return target;
+            }
+            // Se tutti gli edge puntano a loop visitati, non c'è prossima cella
+            return null;
         }
         return null;
     }
