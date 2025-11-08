@@ -684,6 +684,10 @@ public class FlowchartPanel extends JPanel {
                 if (INPUT.equals(blockType)) {
                     String varPart = blockText.replaceFirst("^I:\\s*", "").trim();
                     if (varPart.contains(" ")) {
+                        // Ripristina l'edge originale prima di mostrare l'errore
+                        if (originalLabel == null) originalLabel = "";
+                        graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+
                         JOptionPane.showMessageDialog(this,
                             "Errore: Il nome della variabile non può contenere spazi.\n" +
                             "Usa un nome singolo come 'n', 'x', 'sum', ecc.",
@@ -787,9 +791,9 @@ public class FlowchartPanel extends JPanel {
             case ASSIGNMENT:
                 return "x = 0";
             case INPUT:
-                return "I: Input n";
+                return "I: n";
             case OUTPUT:
-                return "O: Output n";
+                return "O: n";
             case CONDITIONAL:
                 return "x > 0";
             case LOOP:
