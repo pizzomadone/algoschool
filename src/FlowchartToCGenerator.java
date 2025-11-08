@@ -157,9 +157,6 @@ public class FlowchartToCGenerator {
         // Rimuovi eventuale prefisso "I:" o "I: "
         varName = varName.replaceFirst("^I:\\s*", "");
 
-        // Valida che il nome della variabile non contenga spazi
-        varName = varName.replaceAll("\\s+", "_");
-
         appendLine("int " + varName + ";");
         appendLine("scanf(\"%d\", &" + varName + ");");
     }

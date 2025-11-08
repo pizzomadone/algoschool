@@ -680,13 +680,16 @@ public class FlowchartPanel extends JPanel {
                     blockText = getDefaultTextForBlockType(blockType);
                 }
 
-                // Per blocchi INPUT, valida che il nome variabile non contenga spazi multipli
+                // Per blocchi INPUT, valida che il nome variabile non contenga spazi
                 if (INPUT.equals(blockType)) {
                     String varPart = blockText.replaceFirst("^I:\\s*", "").trim();
                     if (varPart.contains(" ")) {
-                        // Sostituisci spazi con underscore nel nome della variabile
-                        String cleanVar = varPart.replaceAll("\\s+", "_");
-                        blockText = "I: " + cleanVar;
+                        JOptionPane.showMessageDialog(this,
+                            "Errore: Il nome della variabile non può contenere spazi.\n" +
+                            "Usa un nome singolo come 'n', 'x', 'sum', ecc.",
+                            "Nome variabile non valido",
+                            JOptionPane.ERROR_MESSAGE);
+                        return; // Non creare il blocco
                     }
                 }
 
