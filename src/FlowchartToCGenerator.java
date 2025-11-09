@@ -663,6 +663,36 @@ public class FlowchartToCGenerator {
             if (!variableTypes.containsKey(varName)) {
                 variableTypes.put(varName, "int");
             }
+        } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+            // FUNCTION_CALL blocks may assign return value to a variable
+            // Format: result = functionName(args) or just functionName(args)
+            if (value.contains("=")) {
+                int equalsIndex = value.indexOf('=');
+                String varName = value.substring(0, equalsIndex).trim();
+                if (!varName.isEmpty() && !variableTypes.containsKey(varName)) {
+                    // Get function name to determine return type
+                    String funcCallExpr = value.substring(equalsIndex + 1).trim();
+                    int parenIndex = funcCallExpr.indexOf('(');
+                    if (parenIndex > 0) {
+                        String functionName = funcCallExpr.substring(0, parenIndex).trim();
+                        // Get return type from function definition
+                        if (flowchartPanel != null) {
+                            FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+                            if (funcDef != null) {
+                                String returnType = funcDef.getReturnType();
+                                if (returnType != null && !"void".equals(returnType)) {
+                                    String cType = convertToCType(returnType);
+                                    variableTypes.put(varName, cType);
+                                }
+                            }
+                        }
+                        // Default to int if function not found
+                        if (!variableTypes.containsKey(varName)) {
+                            variableTypes.put(varName, "int");
+                        }
+                    }
+                }
+            }
         }
 
         // Continue recursively through the graph

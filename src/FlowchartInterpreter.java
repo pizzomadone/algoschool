@@ -828,14 +828,19 @@ public class FlowchartInterpreter {
         FunctionContext returnedContext = callStack.pop();
         graph = previousGraph;
 
-        // Get return value (stored in a special variable or 0 for void functions)
-        Object returnValue = returnedContext.getLocalVariable("__return_value__");
-        if (returnValue == null) {
-            // For void functions, return 0 (not used)
-            returnValue = 0;
+        // Get return value from the specified return variable name
+        Object returnValue = 0;  // Default for void functions
+        String returnVarName = funcDef.getReturnVariableName();
+        String returnType = funcDef.getReturnType();
+
+        if (returnVarName != null && !returnVarName.isEmpty() && !"void".equals(returnType)) {
+            // Read the return variable value
+            returnValue = returnedContext.getLocalVariable(returnVarName);
+            if (returnValue == null) {
+                returnValue = 0;  // Default if not set
+            }
         }
 
-        String returnType = funcDef.getReturnType();
         if (returnType != null && !"void".equals(returnType)) {
             output.append("▶ FUNCTION ").append(functionName).append(" RETURNED: ").append(returnValue).append("\n");
         } else {
