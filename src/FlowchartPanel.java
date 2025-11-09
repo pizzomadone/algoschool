@@ -114,6 +114,18 @@ public class FlowchartPanel extends JPanel {
         graphComponent.getViewport().setOpaque(true);
         graphComponent.getViewport().setBackground(Color.WHITE);
 
+        // CRITICAL: Disable inline editing completely - use dialog instead
+        graphComponent.setCellEditor(null);
+
+        // Add listener to prevent any editing attempts
+        graph.addListener(mxEvent.START_EDITING, new mxEventSource.mxIEventListener() {
+            @Override
+            public void invoke(Object sender, mxEventObject evt) {
+                // Cancel the editing event
+                evt.consume();
+            }
+        });
+
         // Enable grid with better visibility
         graphComponent.setGridVisible(true);
         graphComponent.setGridStyle(mxGraphComponent.GRID_STYLE_LINE);
