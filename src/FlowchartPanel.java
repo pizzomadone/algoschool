@@ -48,6 +48,13 @@ public class FlowchartPanel extends JPanel {
     // Flag to track if initial layout has been applied
     private boolean initialLayoutApplied = false;
 
+    // Function management
+    private Map<String, FunctionDefinition> functions = new HashMap<>();
+    private String currentContext = "main";  // "main" or function name
+    private mxGraph mainGraph = null;  // Separate reference to main graph
+    private Object mainStartCell = null;
+    private Object mainEndCell = null;
+
     // Block type constants
     public static final String ASSIGNMENT = "ASSIGNMENT";  // Assignment block (rectangle)
     public static final String INPUT = "INPUT";  // Input block (parallelogram with I)
@@ -59,6 +66,7 @@ public class FlowchartPanel extends JPanel {
     public static final String START = "START";
     public static final String END = "END";
     public static final String MERGE = "MERGE";  // Merge point for conditionals
+    public static final String FUNCTION_CALL = "FUNCTION_CALL";  // Function call block
 
     @Deprecated
     public static final String PROCESS = ASSIGNMENT;  // Deprecated: use ASSIGNMENT
@@ -89,10 +97,13 @@ public class FlowchartPanel extends JPanel {
         };
 
         graph.setAllowDanglingEdges(false);
-        graph.setCellsEditable(true);
+        graph.setCellsEditable(false);  // Disable direct editing - use dialog instead
         graph.setConnectableEdges(false);
         graph.setCellsDisconnectable(false);
         graph.setCellsMovable(false);  // FIXED: Blocks are now non-movable
+
+        // Save reference to main graph
+        mainGraph = graph;
 
         // Setup custom styles for flowchart blocks
         setupStyles();
@@ -102,6 +113,33 @@ public class FlowchartPanel extends JPanel {
         graphComponent.setConnectable(false);
         graphComponent.getViewport().setOpaque(true);
         graphComponent.getViewport().setBackground(Color.WHITE);
+
+        // CRITICAL: Create a dummy editor that does nothing to prevent inline editing
+        graphComponent.setCellEditor(new com.mxgraph.swing.view.mxICellEditor() {
+            @Override
+            public Object getEditingCell() {
+                return null;
+            }
+
+            @Override
+            public void startEditing(Object cell, java.util.EventObject evt) {
+                // Do nothing - editing is disabled
+            }
+
+            @Override
+            public void stopEditing(boolean cancel) {
+                // Do nothing
+            }
+        });
+
+        // Add listener to prevent any editing attempts
+        graph.addListener(mxEvent.START_EDITING, new mxEventSource.mxIEventListener() {
+            @Override
+            public void invoke(Object sender, mxEventObject evt) {
+                // Cancel the editing event
+                evt.consume();
+            }
+        });
 
         // Enable grid with better visibility
         graphComponent.setGridVisible(true);
@@ -253,6 +291,17 @@ public class FlowchartPanel extends JPanel {
         mergeStyle.put(mxConstants.STYLE_FONTSIZE, 1);
         stylesheet.putCellStyle(MERGE, mergeStyle);
 
+        // Function call block style (rectangle, purple/magenta)
+        Map<String, Object> functionCallStyle = new HashMap<>();
+        functionCallStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
+        functionCallStyle.put(mxConstants.STYLE_FILLCOLOR, "#E6B3FF");  // Light purple
+        functionCallStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        functionCallStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        functionCallStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        functionCallStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        functionCallStyle.put(mxConstants.STYLE_ROUNDED, false);
+        stylesheet.putCellStyle(FUNCTION_CALL, functionCallStyle);
+
         // ============== CORREZIONE DEGLI STILI PER GLI ARCHI ==============
         // Versione semplificata che funziona con tutte le versioni di JGraphX
         
@@ -307,6 +356,10 @@ public class FlowchartPanel extends JPanel {
             // Create start and end nodes
             startCell = graph.insertVertex(parent, null, "Start", 300, 50, 100, 50, START);
             endCell = graph.insertVertex(parent, null, "End", 300, 450, 100, 50, END);
+
+            // Save main start/end cells
+            mainStartCell = startCell;
+            mainEndCell = endCell;
 
             // Create initial edge between start and end
             graph.insertEdge(parent, null, "", startCell, endCell);
@@ -396,8 +449,8 @@ public class FlowchartPanel extends JPanel {
                             // Show vertex menu
                             showVertexMenu(cell, e.getX(), e.getY());
                         } else if (e.getClickCount() == 2) {
-                            // Double-click to edit label
-                            startEditingCell(cell);
+                            // Double-click to edit label via dialog
+                            editCellWithDialog(cell);
                         }
                     }
                 }
@@ -405,10 +458,66 @@ public class FlowchartPanel extends JPanel {
         });
     }
 
-    // Helper method to start editing a cell - uses available JGraphX method
-    private void startEditingCell(Object cell) {
-        if (graph.isCellEditable(cell)) {
-            graphComponent.startEditingAtCell(cell);
+    /**
+     * Opens a dialog to edit the cell content
+     */
+    private void editCellWithDialog(Object cell) {
+        if (cell == null) return;
+
+        mxCell mxCell = (mxCell) cell;
+        String style = mxCell.getStyle();
+
+        // Don't allow editing Start, End, or Merge points
+        if (START.equals(style) || END.equals(style) || MERGE.equals(style)) {
+            return;
+        }
+
+        // Get current value
+        String currentValue = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
+
+        // Determine dialog title based on block type
+        String dialogTitle = "Edit Block Content";
+        String dialogMessage = "Enter new content:";
+
+        if (ASSIGNMENT.equals(style)) {
+            dialogTitle = "Edit Assignment Block";
+            dialogMessage = "Enter assignment (e.g., x = 5):";
+        } else if (INPUT.equals(style)) {
+            dialogTitle = "Edit Input Block";
+            dialogMessage = "Enter variable name:";
+        } else if (OUTPUT.equals(style)) {
+            dialogTitle = "Edit Output Block";
+            dialogMessage = "Enter output expression or string:";
+        } else if (CONDITIONAL.equals(style)) {
+            dialogTitle = "Edit Conditional Block";
+            dialogMessage = "Enter condition (e.g., x > 0):";
+        } else if (LOOP.equals(style) || FOR_LOOP.equals(style) || DO_WHILE.equals(style)) {
+            dialogTitle = "Edit Loop Block";
+            dialogMessage = "Enter loop condition or specification:";
+        } else if (FUNCTION_CALL.equals(style)) {
+            dialogTitle = "Edit Function Call";
+            dialogMessage = "Enter function call (e.g., result = func(x)):";
+        }
+
+        // Show input dialog
+        String newValue = (String) JOptionPane.showInputDialog(
+            graphComponent,
+            dialogMessage,
+            dialogTitle,
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            currentValue
+        );
+
+        // If user didn't cancel, update the cell value
+        if (newValue != null && !newValue.equals(currentValue)) {
+            graph.getModel().beginUpdate();
+            try {
+                graph.getModel().setValue(cell, newValue);
+            } finally {
+                graph.getModel().endUpdate();
+            }
         }
     }
 
@@ -424,7 +533,7 @@ public class FlowchartPanel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
 
         JMenuItem editItem = new JMenuItem("Edit Label (F2)");
-        editItem.addActionListener(e -> startEditingCell(cell));
+        editItem.addActionListener(e -> editCellWithDialog(cell));
         menu.add(editItem);
 
         menu.addSeparator();
@@ -521,11 +630,7 @@ public class FlowchartPanel extends JPanel {
     public void editSelectedLabel() {
         Object cell = graph.getSelectionCell();
         if (cell != null && graph.getModel().isVertex(cell)) {
-            mxCell vertex = (mxCell) cell;
-            String style = vertex.getStyle();
-            if (!MERGE.equals(style)) {
-                startEditingCell(cell);
-            }
+            editCellWithDialog(cell);
         }
     }
 
@@ -808,6 +913,12 @@ public class FlowchartPanel extends JPanel {
 
         menu.addSeparator();
 
+        JMenuItem functionCallItem = new JMenuItem("Insert Function Call Block");
+        functionCallItem.addActionListener(e -> insertBlockOnEdge(edge, FUNCTION_CALL));
+        menu.add(functionCallItem);
+
+        menu.addSeparator();
+
         JMenuItem layoutItem = new JMenuItem("Re-apply Layout");
         layoutItem.addActionListener(e -> applyHierarchicalLayout());
         menu.add(layoutItem);
@@ -852,6 +963,8 @@ public class FlowchartPanel extends JPanel {
                 return "Start";
             case END:
                 return "End";
+            case FUNCTION_CALL:
+                return "myFunction(x, y)";
             default:
                 return "Block";
         }
@@ -1139,6 +1252,20 @@ public class FlowchartPanel extends JPanel {
         if (undoManager != null && undoManager.canUndo()) {
             undoManager.undo();
             graphComponent.refresh();
+
+            // Verifica che START e END esistano ancora dopo l'undo
+            if (!verifyStartEndExist()) {
+                // Se START o END sono stati cancellati, annulla l'undo
+                undoManager.redo();
+                graphComponent.refresh();
+
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Cannot undo: this would remove the Start or End blocks.\nThe flowchart must always have Start and End blocks.",
+                    "Undo Limit Reached",
+                    JOptionPane.WARNING_MESSAGE
+                );
+            }
         }
     }
 
@@ -1256,5 +1383,265 @@ public class FlowchartPanel extends JPanel {
             applyHierarchicalLayout();
             initialLayoutApplied = true;
         });
+    }
+
+    // ===== FUNCTION MANAGEMENT =====
+
+    /**
+     * Creates a new function with the given name.
+     *
+     * @param functionName Name of the function
+     * @return true if created successfully, false if function already exists
+     */
+    public boolean createFunction(String functionName) {
+        if (functionName == null || functionName.trim().isEmpty()) {
+            return false;
+        }
+
+        if (functions.containsKey(functionName) || "main".equals(functionName)) {
+            return false; // Function already exists or name is reserved
+        }
+
+        FunctionDefinition functionDef = new FunctionDefinition(functionName);
+
+        // Initialize the function graph with styles
+        mxGraph funcGraph = functionDef.getFunctionGraph();
+        funcGraph.setStylesheet(graph.getStylesheet()); // Copy styles from main graph
+
+        // Create Start and End blocks for the function
+        Object parent = funcGraph.getDefaultParent();
+        funcGraph.getModel().beginUpdate();
+        try {
+            Object funcStart = funcGraph.insertVertex(parent, null, "Start", 300, 50, 100, 50, START);
+            Object funcEnd = funcGraph.insertVertex(parent, null, "End", 300, 450, 100, 50, END);
+            funcGraph.insertEdge(parent, null, "", funcStart, funcEnd);
+
+            functionDef.setStartCell(funcStart);
+            functionDef.setEndCell(funcEnd);
+        } finally {
+            funcGraph.getModel().endUpdate();
+        }
+
+        functions.put(functionName, functionDef);
+        return true;
+    }
+
+    /**
+     * Creates a new function with a pre-defined FunctionDefinition.
+     *
+     * @param functionName Name of the function
+     * @param functionDef The function definition with parameters
+     * @return true if created successfully, false if function already exists
+     */
+    public boolean createFunctionWithDefinition(String functionName, FunctionDefinition functionDef) {
+        if (functionName == null || functionName.trim().isEmpty() || functionDef == null) {
+            return false;
+        }
+
+        if (functions.containsKey(functionName) || "main".equals(functionName)) {
+            return false; // Function already exists or name is reserved
+        }
+
+        // Initialize the function graph with styles
+        mxGraph funcGraph = functionDef.getFunctionGraph();
+        funcGraph.setStylesheet(graph.getStylesheet()); // Copy styles from main graph
+
+        // Create Start and End blocks for the function
+        Object parent = funcGraph.getDefaultParent();
+        funcGraph.getModel().beginUpdate();
+        try {
+            Object funcStart = funcGraph.insertVertex(parent, null, "Start", 300, 50, 100, 50, START);
+            Object funcEnd = funcGraph.insertVertex(parent, null, "End", 300, 450, 100, 50, END);
+            funcGraph.insertEdge(parent, null, "", funcStart, funcEnd);
+
+            functionDef.setStartCell(funcStart);
+            functionDef.setEndCell(funcEnd);
+        } finally {
+            funcGraph.getModel().endUpdate();
+        }
+
+        functions.put(functionName, functionDef);
+        return true;
+    }
+
+    /**
+     * Inserts an INPUT block after the given cell.
+     *
+     * @param afterCell The cell after which to insert the INPUT block
+     * @param variableName The name of the input variable
+     * @return The newly created INPUT cell
+     */
+    public Object insertInputBlockAfter(Object afterCell, String variableName) {
+        if (afterCell == null) {
+            return null;
+        }
+
+        graph.getModel().beginUpdate();
+        try {
+            // Find the edge from afterCell
+            Object[] edges = graph.getOutgoingEdges(afterCell);
+            if (edges == null || edges.length == 0) {
+                return null;
+            }
+
+            com.mxgraph.model.mxCell edge = (com.mxgraph.model.mxCell) edges[0];
+            Object targetCell = edge.getTarget();
+
+            // Remove the old edge
+            graph.removeCells(new Object[]{edge});
+
+            // Create the INPUT block
+            Object parent = graph.getDefaultParent();
+            Object inputCell = graph.insertVertex(parent, null, variableName, 0, 0, 150, 60, INPUT);
+
+            // Insert edges: afterCell -> inputCell -> targetCell
+            graph.insertEdge(parent, null, "", afterCell, inputCell);
+            graph.insertEdge(parent, null, "", inputCell, targetCell);
+
+            // Apply layout
+            applyHierarchicalLayout();
+
+            return inputCell;
+        } finally {
+            graph.getModel().endUpdate();
+        }
+    }
+
+    /**
+     * Deletes a function.
+     *
+     * @param functionName Name of the function to delete
+     * @return true if deleted successfully, false if function doesn't exist
+     */
+    public boolean deleteFunction(String functionName) {
+        if (!functions.containsKey(functionName)) {
+            return false;
+        }
+
+        functions.remove(functionName);
+
+        // If we're currently viewing this function, switch back to main
+        if (currentContext.equals(functionName)) {
+            switchToContext("main");
+        }
+
+        return true;
+    }
+
+    /**
+     * Switches the current context to main or a function.
+     *
+     * @param contextName "main" or a function name
+     * @return true if switched successfully, false if context doesn't exist
+     */
+    public boolean switchToContext(String contextName) {
+        if ("main".equals(contextName)) {
+            // Save current graph state if we're in a function
+            if (!"main".equals(currentContext)) {
+                FunctionDefinition currentFunc = functions.get(currentContext);
+                if (currentFunc != null) {
+                    // The function graph is already up to date
+                }
+            }
+
+            // Switch to main
+            currentContext = "main";
+            graph = mainGraph;
+            startCell = mainStartCell;
+            endCell = mainEndCell;
+
+            // Update the graphComponent to display the main graph
+            graphComponent.setGraph(mainGraph);
+            graphComponent.refresh();
+
+            return true;
+
+        } else {
+            // Switch to a function
+            FunctionDefinition funcDef = functions.get(contextName);
+            if (funcDef == null) {
+                return false; // Function doesn't exist
+            }
+
+            // Save current graph state if we're in main
+            if ("main".equals(currentContext)) {
+                // Main graph is already up to date
+            }
+
+            // Switch to function
+            currentContext = contextName;
+            graph = funcDef.getFunctionGraph();
+            startCell = funcDef.getStartCell();
+            endCell = funcDef.getEndCell();
+
+            // Update the graphComponent to display the function graph
+            graphComponent.setGraph(funcDef.getFunctionGraph());
+            graphComponent.refresh();
+
+            return true;
+        }
+    }
+
+    /**
+     * Gets the current context name.
+     *
+     * @return "main" or the name of the current function
+     */
+    public String getCurrentContext() {
+        return currentContext;
+    }
+
+    /**
+     * Gets all defined functions.
+     *
+     * @return Map of function names to function definitions
+     */
+    public Map<String, FunctionDefinition> getFunctions() {
+        return functions;
+    }
+
+    /**
+     * Gets a specific function definition.
+     *
+     * @param functionName Name of the function
+     * @return FunctionDefinition or null if not found
+     */
+    public FunctionDefinition getFunction(String functionName) {
+        return functions.get(functionName);
+    }
+
+    /**
+     * Verifies that START and END blocks still exist in the graph.
+     * Used to prevent undo operations from removing essential blocks.
+     *
+     * @return true if both START and END exist, false otherwise
+     */
+    private boolean verifyStartEndExist() {
+        Object parent = graph.getDefaultParent();
+        Object[] vertices = graph.getChildVertices(parent);
+
+        boolean hasStart = false;
+        boolean hasEnd = false;
+
+        for (Object vertex : vertices) {
+            if (vertex instanceof mxCell) {
+                mxCell cell = (mxCell) vertex;
+                String style = cell.getStyle();
+
+                if (START.equals(style)) {
+                    hasStart = true;
+                    startCell = vertex;  // Update reference
+                } else if (END.equals(style)) {
+                    hasEnd = true;
+                    endCell = vertex;  // Update reference
+                }
+
+                if (hasStart && hasEnd) {
+                    return true;  // Found both, can return early
+                }
+            }
+        }
+
+        return hasStart && hasEnd;
     }
 }

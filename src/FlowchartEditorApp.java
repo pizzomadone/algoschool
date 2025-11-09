@@ -3,6 +3,9 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -11,7 +14,10 @@ import java.util.Map;
  */
 public class FlowchartEditorApp extends JFrame {
 
-    private FlowchartPanel flowchartPanel;
+    private JTabbedPane tabbedPane;
+    private FlowchartPanel mainFlowchartPanel;
+    private Map<String, FlowchartPanel> functionPanels;  // functionName -> panel
+    private FlowchartPanel currentFlowchartPanel;
     private ExecutionControlPanel controlPanel;
     private OutputPanel outputPanel;
     private CCodePanel cCodePanel;
@@ -38,13 +44,36 @@ public class FlowchartEditorApp extends JFrame {
     }
 
     private void initializeComponents() {
-        // Create flowchart panel
-        flowchartPanel = new FlowchartPanel();
+        // Initialize function panels map
+        functionPanels = new HashMap<>();
 
-        // Add panel in scroll pane
-        JScrollPane scrollPane = new JScrollPane(flowchartPanel);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        // Create main flowchart panel
+        mainFlowchartPanel = new FlowchartPanel();
+        currentFlowchartPanel = mainFlowchartPanel;
+
+        // Create tabbed pane
+        tabbedPane = new JTabbedPane();
+        tabbedPane.addTab("Main", createScrollPaneForPanel(mainFlowchartPanel));
+
+        // Add tab change listener to update interpreter when switching tabs
+        tabbedPane.addChangeListener(e -> onTabChanged());
+
+        // Add mouse listener for right-click on tabs to delete functions
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                    if (tabIndex >= 0) {
+                        String tabTitle = tabbedPane.getTitleAt(tabIndex);
+                        // Only show delete option for function tabs (not Main)
+                        if (!"Main".equals(tabTitle)) {
+                            showTabContextMenu(e, tabIndex, tabTitle);
+                        }
+                    }
+                }
+            }
+        });
 
         // Create execution panels
         controlPanel = new ExecutionControlPanel();
@@ -52,11 +81,12 @@ public class FlowchartEditorApp extends JFrame {
         cCodePanel = new CCodePanel();
         variablesPanel = new VariablesPanel();
 
-        // Create interpreter
+        // Create interpreter with mainFlowchartPanel reference for function support
         interpreter = new FlowchartInterpreter(
-            flowchartPanel.getGraph(),
-            flowchartPanel.getStartCell(),
-            flowchartPanel.getEndCell()
+            mainFlowchartPanel.getGraph(),
+            mainFlowchartPanel.getStartCell(),
+            mainFlowchartPanel.getEndCell(),
+            mainFlowchartPanel
         );
 
         // Setup interpreter listener
@@ -80,8 +110,8 @@ public class FlowchartEditorApp extends JFrame {
         rightSplitPane.setDividerLocation(200);
         rightSplitPane.setResizeWeight(0.33);
 
-        // Create main split pane
-        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollPane, rightSplitPane);
+        // Create main split pane with tabbed pane on the left
+        JSplitPane mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabbedPane, rightSplitPane);
         // Pannello destro: 1400 - 750 = 650px
         mainSplitPane.setDividerLocation(750);
         mainSplitPane.setResizeWeight(750.0 / 1400.0);  // = 0.536
@@ -94,13 +124,96 @@ public class FlowchartEditorApp extends JFrame {
         add(statusBar, BorderLayout.SOUTH);
     }
 
+    /**
+     * Creates a scroll pane for a flowchart panel
+     */
+    private JScrollPane createScrollPaneForPanel(FlowchartPanel panel) {
+        JScrollPane scrollPane = new JScrollPane(panel);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        return scrollPane;
+    }
+
+    /**
+     * Called when a tab is changed
+     */
+    private void onTabChanged() {
+        int selectedIndex = tabbedPane.getSelectedIndex();
+        String tabTitle = tabbedPane.getTitleAt(selectedIndex);
+
+        // Save previous tab's graph to main panel if it was a function
+        if (currentFlowchartPanel != null && currentFlowchartPanel != mainFlowchartPanel) {
+            // Find the function name for current panel
+            String currentFunctionName = null;
+            for (Map.Entry<String, FlowchartPanel> entry : functionPanels.entrySet()) {
+                if (entry.getValue() == currentFlowchartPanel) {
+                    currentFunctionName = entry.getKey();
+                    break;
+                }
+            }
+
+            // Sync function graph back to main panel
+            if (currentFunctionName != null) {
+                syncFunctionToMain(currentFunctionName, currentFlowchartPanel);
+            }
+        }
+
+        // Update current flowchart panel
+        if ("Main".equals(tabTitle)) {
+            currentFlowchartPanel = mainFlowchartPanel;
+        } else {
+            currentFlowchartPanel = functionPanels.get(tabTitle);
+
+            // Sync function graph from main panel to function panel
+            syncFunctionFromMain(tabTitle, currentFlowchartPanel);
+        }
+
+        // Update interpreter to use the new panel's graph
+        if (currentFlowchartPanel != null) {
+            interpreter = new FlowchartInterpreter(
+                currentFlowchartPanel.getGraph(),
+                currentFlowchartPanel.getStartCell(),
+                currentFlowchartPanel.getEndCell(),
+                mainFlowchartPanel  // Always pass main panel for function access
+            );
+
+            setupInterpreter();
+            setupGraphListener();
+            updateCCode();
+
+            // Update title
+            setTitle("Flowchart Editor - " + tabTitle);
+        }
+    }
+
+    /**
+     * Syncs a function's graph from its panel to the main panel
+     */
+    private void syncFunctionToMain(String functionName, FlowchartPanel functionPanel) {
+        FunctionDefinition funcDef = mainFlowchartPanel.getFunction(functionName);
+        if (funcDef != null) {
+            // Copy the graph from function panel to function definition
+            funcDef.setFunctionGraph(functionPanel.getGraph());
+            funcDef.setStartCell(functionPanel.getStartCell());
+            funcDef.setEndCell(functionPanel.getEndCell());
+        }
+    }
+
+    /**
+     * Syncs a function's graph from the main panel to its panel
+     */
+    private void syncFunctionFromMain(String functionName, FlowchartPanel functionPanel) {
+        // Currently the function panel is created fresh, so no need to sync on first creation
+        // This method is here for future enhancements where we might reload tabs
+    }
+
     private void setupInterpreter() {
         interpreter.setExecutionListener(new FlowchartInterpreter.ExecutionListener() {
             @Override
             public void onExecutionStep(Object cell, Map<String, Object> variables, String output) {
                 // Update UI
                 SwingUtilities.invokeLater(() -> {
-                    flowchartPanel.highlightCell(cell);
+                    currentFlowchartPanel.highlightCell(cell);
                     variablesPanel.updateVariables(variables);
                     outputPanel.setOutput(output);
                 });
@@ -119,7 +232,7 @@ public class FlowchartEditorApp extends JFrame {
             @Override
             public void onExecutionComplete() {
                 SwingUtilities.invokeLater(() -> {
-                    flowchartPanel.clearHighlight();
+                    currentFlowchartPanel.clearHighlight();
                     controlPanel.setStatus("Execution completed");
                     controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
                 });
@@ -128,7 +241,7 @@ public class FlowchartEditorApp extends JFrame {
             @Override
             public void onExecutionError(String error) {
                 SwingUtilities.invokeLater(() -> {
-                    flowchartPanel.clearHighlight();
+                    currentFlowchartPanel.clearHighlight();
                     controlPanel.setStatus("Error: " + error);
                     controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
                     JOptionPane.showMessageDialog(
@@ -163,8 +276,14 @@ public class FlowchartEditorApp extends JFrame {
 
     private void setupGraphListener() {
         // Aggiungi un listener al modello del grafo per aggiornare il codice C in real-time
-        flowchartPanel.getGraph().getModel().addListener(com.mxgraph.util.mxEvent.CHANGE,
+        currentFlowchartPanel.getGraph().getModel().addListener(com.mxgraph.util.mxEvent.CHANGE,
             (sender, evt) -> {
+                // NON aggiornare il codice C durante l'esecuzione
+                // (quando l'interprete evidenzia le celle, trigger eventi CHANGE)
+                if (interpreter != null && interpreter.isRunning()) {
+                    return;  // Skip update durante esecuzione
+                }
+
                 // Aggiorna il codice C quando il grafo cambia
                 SwingUtilities.invokeLater(() -> updateCCode());
             }
@@ -187,13 +306,13 @@ public class FlowchartEditorApp extends JFrame {
                     new Thread(() -> {
                         // Riprendi esecuzione automatica
                         while (interpreter.isRunning() &&
-                               interpreter.getCurrentCell() != flowchartPanel.getEndCell()) {
+                               interpreter.getCurrentCell() != currentFlowchartPanel.getEndCell()) {
                             interpreter.step();
                         }
 
                         // Esecuzione completata
                         SwingUtilities.invokeLater(() -> {
-                            flowchartPanel.clearHighlight();
+                            currentFlowchartPanel.clearHighlight();
                             controlPanel.setStatus("Execution completed");
                             controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
                         });
@@ -203,13 +322,14 @@ public class FlowchartEditorApp extends JFrame {
                     // Nuova esecuzione - reset UI
                     outputPanel.clear();
                     variablesPanel.clear();
-                    flowchartPanel.clearHighlight();
+                    currentFlowchartPanel.clearHighlight();
 
                     // Update interpreter with current graph state
                     interpreter = new FlowchartInterpreter(
-                        flowchartPanel.getGraph(),
-                        flowchartPanel.getStartCell(),
-                        flowchartPanel.getEndCell()
+                        currentFlowchartPanel.getGraph(),
+                        currentFlowchartPanel.getStartCell(),
+                        currentFlowchartPanel.getEndCell(),
+                        mainFlowchartPanel  // CRITICAL: Pass main panel for function support
                     );
                     setupInterpreter();
 
@@ -229,13 +349,14 @@ public class FlowchartEditorApp extends JFrame {
                     // First step - reset UI
                     outputPanel.clear();
                     variablesPanel.clear();
-                    flowchartPanel.clearHighlight();
+                    currentFlowchartPanel.clearHighlight();
 
                     // Update interpreter
                     interpreter = new FlowchartInterpreter(
-                        flowchartPanel.getGraph(),
-                        flowchartPanel.getStartCell(),
-                        flowchartPanel.getEndCell()
+                        currentFlowchartPanel.getGraph(),
+                        currentFlowchartPanel.getStartCell(),
+                        currentFlowchartPanel.getEndCell(),
+                        mainFlowchartPanel  // CRITICAL: Pass main panel for function support
                     );
                     setupInterpreter();
 
@@ -252,9 +373,9 @@ public class FlowchartEditorApp extends JFrame {
 
                     SwingUtilities.invokeLater(() -> {
                         if (!interpreter.isRunning() ||
-                            interpreter.getCurrentCell() == flowchartPanel.getEndCell()) {
+                            interpreter.getCurrentCell() == currentFlowchartPanel.getEndCell()) {
                             // Esecuzione completata
-                            flowchartPanel.clearHighlight();
+                            currentFlowchartPanel.clearHighlight();
                             controlPanel.setStatus("Execution completed");
                             controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
                         } else {
@@ -269,7 +390,7 @@ public class FlowchartEditorApp extends JFrame {
             @Override
             public void onStop() {
                 interpreter.stop();
-                flowchartPanel.clearHighlight();
+                currentFlowchartPanel.clearHighlight();
                 controlPanel.setStatus("Stopped");
                 controlPanel.setState(ExecutionControlPanel.ExecutionState.IDLE);
             }
@@ -277,7 +398,7 @@ public class FlowchartEditorApp extends JFrame {
             @Override
             public void onReset() {
                 interpreter.reset();
-                flowchartPanel.clearHighlight();
+                currentFlowchartPanel.clearHighlight();
                 outputPanel.clear();
                 variablesPanel.clear();
                 controlPanel.setStatus("Ready");
@@ -343,24 +464,24 @@ public class FlowchartEditorApp extends JFrame {
 
         JMenuItem undoItem = new JMenuItem("Undo");
         undoItem.setAccelerator(KeyStroke.getKeyStroke("control Z"));
-        undoItem.addActionListener(e -> flowchartPanel.undo());
+        undoItem.addActionListener(e -> currentFlowchartPanel.undo());
         editMenu.add(undoItem);
 
         JMenuItem redoItem = new JMenuItem("Redo");
         redoItem.setAccelerator(KeyStroke.getKeyStroke("control Y"));
-        redoItem.addActionListener(e -> flowchartPanel.redo());
+        redoItem.addActionListener(e -> currentFlowchartPanel.redo());
         editMenu.add(redoItem);
 
         editMenu.addSeparator();
 
         JMenuItem deleteItem = new JMenuItem("Delete Selected");
         deleteItem.setAccelerator(KeyStroke.getKeyStroke("DELETE"));
-        deleteItem.addActionListener(e -> flowchartPanel.deleteSelected());
+        deleteItem.addActionListener(e -> currentFlowchartPanel.deleteSelected());
         editMenu.add(deleteItem);
 
         JMenuItem editLabelItem = new JMenuItem("Edit Label");
         editLabelItem.setAccelerator(KeyStroke.getKeyStroke("F2"));
-        editLabelItem.addActionListener(e -> flowchartPanel.editSelectedLabel());
+        editLabelItem.addActionListener(e -> currentFlowchartPanel.editSelectedLabel());
         editMenu.add(editLabelItem);
 
         menuBar.add(editMenu);
@@ -371,20 +492,31 @@ public class FlowchartEditorApp extends JFrame {
 
         JMenuItem zoomInItem = new JMenuItem("Zoom In");
         zoomInItem.setAccelerator(KeyStroke.getKeyStroke("control PLUS"));
-        zoomInItem.addActionListener(e -> flowchartPanel.zoomIn());
+        zoomInItem.addActionListener(e -> currentFlowchartPanel.zoomIn());
         viewMenu.add(zoomInItem);
 
         JMenuItem zoomOutItem = new JMenuItem("Zoom Out");
         zoomOutItem.setAccelerator(KeyStroke.getKeyStroke("control MINUS"));
-        zoomOutItem.addActionListener(e -> flowchartPanel.zoomOut());
+        zoomOutItem.addActionListener(e -> currentFlowchartPanel.zoomOut());
         viewMenu.add(zoomOutItem);
 
         JMenuItem resetZoomItem = new JMenuItem("Reset Zoom");
         resetZoomItem.setAccelerator(KeyStroke.getKeyStroke("control 0"));
-        resetZoomItem.addActionListener(e -> flowchartPanel.resetZoom());
+        resetZoomItem.addActionListener(e -> currentFlowchartPanel.resetZoom());
         viewMenu.add(resetZoomItem);
 
         menuBar.add(viewMenu);
+
+        // Functions menu
+        JMenu functionsMenu = new JMenu("Functions");
+        functionsMenu.setMnemonic('F');
+
+        JMenuItem newFunctionItem = new JMenuItem("New Function...");
+        newFunctionItem.setAccelerator(KeyStroke.getKeyStroke("control shift F"));
+        newFunctionItem.addActionListener(e -> createNewFunction());
+        functionsMenu.add(newFunctionItem);
+
+        menuBar.add(functionsMenu);
 
         // Help menu
         JMenu helpMenu = new JMenu("Help");
@@ -416,6 +548,16 @@ public class FlowchartEditorApp extends JFrame {
 
         toolBar.addSeparator();
 
+        // New Function button
+        JButton newFunctionBtn = new JButton("➕ New Function");
+        newFunctionBtn.setToolTipText("Create a new function (Ctrl+Shift+F)");
+        newFunctionBtn.setFont(newFunctionBtn.getFont().deriveFont(Font.BOLD));
+        newFunctionBtn.setForeground(new Color(0, 0, 150));
+        newFunctionBtn.addActionListener(e -> createNewFunction());
+        toolBar.add(newFunctionBtn);
+
+        toolBar.addSeparator();
+
         // Create Undo and Redo buttons
         JButton undoBtn = new JButton("← Indietro");
         undoBtn.setToolTipText("Undo last change (Ctrl+Z)");
@@ -425,12 +567,12 @@ public class FlowchartEditorApp extends JFrame {
 
         // Add action listeners
         undoBtn.addActionListener(e -> {
-            flowchartPanel.undo();
+            currentFlowchartPanel.undo();
             updateUndoRedoButtons(undoBtn, redoBtn);
         });
 
         redoBtn.addActionListener(e -> {
-            flowchartPanel.redo();
+            currentFlowchartPanel.redo();
             updateUndoRedoButtons(undoBtn, redoBtn);
         });
 
@@ -477,20 +619,20 @@ public class FlowchartEditorApp extends JFrame {
         );
 
         if (choice == JOptionPane.OK_OPTION) {
-            flowchartPanel.clearFlowchart();
+            currentFlowchartPanel.clearFlowchart();
         }
     }
 
     private void loadExample(int exampleNumber) {
         switch (exampleNumber) {
             case 1:
-                flowchartPanel.createSimpleConditionalExample();
+                currentFlowchartPanel.createSimpleConditionalExample();
                 break;
             case 2:
-                flowchartPanel.createLoopExample();
+                currentFlowchartPanel.createLoopExample();
                 break;
             case 3:
-                flowchartPanel.createNestedConditionalExample();
+                currentFlowchartPanel.createNestedConditionalExample();
                 break;
         }
     }
@@ -630,7 +772,7 @@ public class FlowchartEditorApp extends JFrame {
             }
 
             try {
-                flowchartPanel.saveFlowchart(file);
+                currentFlowchartPanel.saveFlowchart(file);
                 JOptionPane.showMessageDialog(
                     this,
                     "Flowchart saved successfully to:\n" + file.getAbsolutePath(),
@@ -668,13 +810,14 @@ public class FlowchartEditorApp extends JFrame {
                 File file = fileChooser.getSelectedFile();
 
                 try {
-                    flowchartPanel.loadFlowchart(file);
+                    currentFlowchartPanel.loadFlowchart(file);
 
                     // Reset execution state
                     interpreter = new FlowchartInterpreter(
-                        flowchartPanel.getGraph(),
-                        flowchartPanel.getStartCell(),
-                        flowchartPanel.getEndCell()
+                        currentFlowchartPanel.getGraph(),
+                        currentFlowchartPanel.getStartCell(),
+                        currentFlowchartPanel.getEndCell(),
+                        mainFlowchartPanel  // CRITICAL: Pass main panel for function support
                     );
                     setupInterpreter();
 
@@ -713,8 +856,8 @@ public class FlowchartEditorApp extends JFrame {
      * Update the enabled state of undo/redo buttons based on availability
      */
     private void updateUndoRedoButtons(JButton undoBtn, JButton redoBtn) {
-        undoBtn.setEnabled(flowchartPanel.canUndo());
-        redoBtn.setEnabled(flowchartPanel.canRedo());
+        undoBtn.setEnabled(currentFlowchartPanel.canUndo());
+        redoBtn.setEnabled(currentFlowchartPanel.canRedo());
     }
 
     /**
@@ -722,15 +865,558 @@ public class FlowchartEditorApp extends JFrame {
      */
     private void updateCCode() {
         try {
+            // Se siamo su una funzione tab, sincronizza il grafo prima di generare
+            if (currentFlowchartPanel != null && currentFlowchartPanel != mainFlowchartPanel) {
+                // Find the function name for current panel
+                String currentFunctionName = null;
+                for (Map.Entry<String, FlowchartPanel> entry : functionPanels.entrySet()) {
+                    if (entry.getValue() == currentFlowchartPanel) {
+                        currentFunctionName = entry.getKey();
+                        break;
+                    }
+                }
+
+                // Sync function graph back to main panel BEFORE generating code
+                if (currentFunctionName != null) {
+                    syncFunctionToMain(currentFunctionName, currentFlowchartPanel);
+                }
+            }
+
+            // ALWAYS generate from main panel to show complete program
+            // This fixes the bug where function code appears in main() when viewing function tabs
             FlowchartToCGenerator generator = new FlowchartToCGenerator(
-                flowchartPanel.getGraph(),
-                flowchartPanel.getStartCell(),
-                flowchartPanel.getEndCell()
+                mainFlowchartPanel.getGraph(),
+                mainFlowchartPanel.getStartCell(),
+                mainFlowchartPanel.getEndCell(),
+                mainFlowchartPanel  // Pass main panel for function access
             );
             String code = generator.generateCode();
             cCodePanel.setCode(code);
         } catch (Exception e) {
             cCodePanel.setCode("// Errore nella generazione del codice:\n// " + e.getMessage());
+        }
+    }
+
+    // ===== FUNCTION MANAGEMENT METHODS =====
+
+    private void createNewFunction() {
+        // Create custom dialog for function name, parameters, and return type
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+
+        // Top panel: Function name
+        JPanel namePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        namePanel.add(new JLabel("Function name:"));
+        JTextField nameField = new JTextField(20);
+        namePanel.add(nameField);
+        mainPanel.add(namePanel, BorderLayout.NORTH);
+
+        // Center panel: Parameters list with add/remove buttons
+        JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
+        centerPanel.setBorder(BorderFactory.createTitledBorder("Formal Parameters"));
+
+        DefaultListModel<FunctionDefinition.Parameter> paramListModel = new DefaultListModel<>();
+        JList<FunctionDefinition.Parameter> paramList = new JList<>(paramListModel);
+        paramList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane paramScrollPane = new JScrollPane(paramList);
+        paramScrollPane.setPreferredSize(new Dimension(300, 100));
+        centerPanel.add(paramScrollPane, BorderLayout.CENTER);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton addParamBtn = new JButton("➕ Add Parameter");
+        JButton removeParamBtn = new JButton("➖ Remove Selected");
+
+        addParamBtn.addActionListener(e -> {
+            // Show dialog to add parameter
+            JPanel paramPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+            JTextField paramNameField = new JTextField(15);
+            String[] types = {"int", "double", "string"};
+            JComboBox<String> paramTypeCombo = new JComboBox<>(types);
+
+            paramPanel.add(new JLabel("Parameter name:"));
+            paramPanel.add(paramNameField);
+            paramPanel.add(new JLabel("Parameter type:"));
+            paramPanel.add(paramTypeCombo);
+
+            int result = JOptionPane.showConfirmDialog(this, paramPanel, "Add Parameter",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+            if (result == JOptionPane.OK_OPTION) {
+                String paramName = paramNameField.getText().trim();
+                String paramType = (String) paramTypeCombo.getSelectedItem();
+
+                if (paramName.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Parameter name cannot be empty.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (!paramName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                    JOptionPane.showMessageDialog(this,
+                        "Invalid parameter name. Use only letters, numbers, and underscores.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                paramListModel.addElement(new FunctionDefinition.Parameter(paramName, paramType));
+            }
+        });
+
+        removeParamBtn.addActionListener(e -> {
+            int selectedIndex = paramList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                paramListModel.remove(selectedIndex);
+            }
+        });
+
+        buttonPanel.add(addParamBtn);
+        buttonPanel.add(removeParamBtn);
+        centerPanel.add(buttonPanel, BorderLayout.SOUTH);
+        mainPanel.add(centerPanel, BorderLayout.CENTER);
+
+        // Bottom panel: Return type and return variable name
+        JPanel returnPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+        returnPanel.setBorder(BorderFactory.createTitledBorder("Return Value"));
+
+        returnPanel.add(new JLabel("Return type:"));
+        String[] returnTypes = {"void", "int", "double", "string"};
+        JComboBox<String> returnTypeCombo = new JComboBox<>(returnTypes);
+        returnTypeCombo.setToolTipText("Select void for procedures (no return value)");
+        returnPanel.add(returnTypeCombo);
+
+        returnPanel.add(new JLabel("Return variable name:"));
+        JTextField returnVarField = new JTextField(15);
+        returnVarField.setEnabled(false);  // Disabled by default (void selected)
+        returnVarField.setToolTipText("Name of the variable to return (enabled only for non-void functions)");
+        returnPanel.add(returnVarField);
+
+        // Add listener to enable/disable return variable name field based on return type
+        returnTypeCombo.addActionListener(e -> {
+            String selectedType = (String) returnTypeCombo.getSelectedItem();
+            boolean isVoid = "void".equals(selectedType);
+            returnVarField.setEnabled(!isVoid);
+            if (isVoid) {
+                returnVarField.setText("");
+            }
+        });
+
+        mainPanel.add(returnPanel, BorderLayout.SOUTH);
+
+        int result = JOptionPane.showConfirmDialog(
+            this,
+            mainPanel,
+            "New Function",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (result != JOptionPane.OK_OPTION) {
+            return; // User cancelled
+        }
+
+        String functionName = nameField.getText().trim();
+        String returnType = (String) returnTypeCombo.getSelectedItem();
+        String returnVarName = returnVarField.getText().trim();
+
+        if (functionName.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Function name cannot be empty.",
+                "Invalid Name",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        // Validate function name
+        if (!functionName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Invalid function name. Use only letters, numbers, and underscores.\nMust start with a letter or underscore.",
+                "Invalid Name",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        // Check if function already exists
+        if ("Main".equalsIgnoreCase(functionName) || functionPanels.containsKey(functionName)) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Function '" + functionName + "' already exists or name is reserved.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        // Validate return variable name if not void
+        if (!"void".equals(returnType)) {
+            if (returnVarName.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Return variable name is required for non-void functions.",
+                    "Invalid Return Variable",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            if (!returnVarName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Invalid return variable name. Use only letters, numbers, and underscores.\nMust start with a letter or underscore.",
+                    "Invalid Return Variable",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+        }
+
+        // Get parameters from list
+        List<FunctionDefinition.Parameter> parameters = new ArrayList<>();
+        for (int i = 0; i < paramListModel.getSize(); i++) {
+            parameters.add(paramListModel.getElementAt(i));
+        }
+
+        // Create function in main panel with parameters, return type, and return variable name
+        String finalReturnVarName = "void".equals(returnType) ? null : returnVarName;
+        FunctionDefinition funcDef = new FunctionDefinition(functionName, parameters, returnType, finalReturnVarName);
+        if (mainFlowchartPanel.createFunctionWithDefinition(functionName, funcDef)) {
+            // Create a new FlowchartPanel for this function
+            FlowchartPanel functionPanel = new FlowchartPanel();
+
+            // Store the function panel
+            functionPanels.put(functionName, functionPanel);
+
+            // Add a new tab
+            tabbedPane.addTab(functionName, createScrollPaneForPanel(functionPanel));
+
+            // Switch to the new tab
+            tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
+
+            // Build parameters message
+            StringBuilder paramsMsg = new StringBuilder();
+            if (parameters.isEmpty()) {
+                paramsMsg.append("no parameters");
+            } else {
+                paramsMsg.append("parameters:\n");
+                for (FunctionDefinition.Parameter param : parameters) {
+                    paramsMsg.append("  - ").append(param.toString()).append("\n");
+                }
+            }
+
+            String returnMessage;
+            if ("void".equals(returnType)) {
+                returnMessage = "procedure (no return)";
+            } else {
+                returnMessage = "returns " + returnType + " (variable: " + returnVarName + ")";
+            }
+
+            JOptionPane.showMessageDialog(
+                this,
+                "Function '" + functionName + "' created successfully!\n\n" +
+                paramsMsg.toString() +
+                "Return: " + returnMessage + "\n\n" +
+                "You can now design the function body using flowchart blocks.\n" +
+                "Use FUNCTION_CALL blocks to call this function from other parts of the program.",
+                "Success",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Failed to create function.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    /**
+     * Edits an existing function's definition (parameters, return type, etc.)
+     */
+    private void editFunction(String functionName) {
+        // Retrieve existing function definition
+        FunctionDefinition existingFunc = mainFlowchartPanel.getFunction(functionName);
+        if (existingFunc == null) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Function '" + functionName + "' not found.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
+
+        // Create custom dialog for editing function
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+
+        // Top panel: Function name (read-only)
+        JPanel namePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        namePanel.add(new JLabel("Function name:"));
+        JTextField nameField = new JTextField(20);
+        nameField.setText(functionName);
+        nameField.setEditable(false);  // Cannot rename function
+        nameField.setToolTipText("Function name cannot be changed");
+        namePanel.add(nameField);
+        mainPanel.add(namePanel, BorderLayout.NORTH);
+
+        // Center panel: Parameters list with add/remove buttons
+        JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
+        centerPanel.setBorder(BorderFactory.createTitledBorder("Formal Parameters"));
+
+        DefaultListModel<FunctionDefinition.Parameter> paramListModel = new DefaultListModel<>();
+
+        // Pre-populate with existing parameters
+        List<FunctionDefinition.Parameter> existingParams = existingFunc.getFormalParameters();
+        if (existingParams != null) {
+            for (FunctionDefinition.Parameter param : existingParams) {
+                paramListModel.addElement(param);
+            }
+        }
+
+        JList<FunctionDefinition.Parameter> paramList = new JList<>(paramListModel);
+        paramList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane paramScrollPane = new JScrollPane(paramList);
+        paramScrollPane.setPreferredSize(new Dimension(300, 100));
+        centerPanel.add(paramScrollPane, BorderLayout.CENTER);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton addParamBtn = new JButton("➕ Add Parameter");
+        JButton removeParamBtn = new JButton("➖ Remove Selected");
+
+        addParamBtn.addActionListener(e -> {
+            // Show dialog to add parameter
+            JPanel paramPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+            JTextField paramNameField = new JTextField(15);
+            String[] types = {"int", "double", "string"};
+            JComboBox<String> paramTypeCombo = new JComboBox<>(types);
+
+            paramPanel.add(new JLabel("Parameter name:"));
+            paramPanel.add(paramNameField);
+            paramPanel.add(new JLabel("Parameter type:"));
+            paramPanel.add(paramTypeCombo);
+
+            int result = JOptionPane.showConfirmDialog(this, paramPanel, "Add Parameter",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+            if (result == JOptionPane.OK_OPTION) {
+                String paramName = paramNameField.getText().trim();
+                String paramType = (String) paramTypeCombo.getSelectedItem();
+
+                if (paramName.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Parameter name cannot be empty.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (!paramName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                    JOptionPane.showMessageDialog(this,
+                        "Invalid parameter name. Use only letters, numbers, and underscores.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                paramListModel.addElement(new FunctionDefinition.Parameter(paramName, paramType));
+            }
+        });
+
+        removeParamBtn.addActionListener(e -> {
+            int selectedIndex = paramList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                paramListModel.remove(selectedIndex);
+            }
+        });
+
+        buttonPanel.add(addParamBtn);
+        buttonPanel.add(removeParamBtn);
+        centerPanel.add(buttonPanel, BorderLayout.SOUTH);
+        mainPanel.add(centerPanel, BorderLayout.CENTER);
+
+        // Bottom panel: Return type and return variable name
+        JPanel returnPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+        returnPanel.setBorder(BorderFactory.createTitledBorder("Return Value"));
+
+        returnPanel.add(new JLabel("Return type:"));
+        String[] returnTypes = {"void", "int", "double", "string"};
+        JComboBox<String> returnTypeCombo = new JComboBox<>(returnTypes);
+        returnTypeCombo.setToolTipText("Select void for procedures (no return value)");
+
+        // Pre-select existing return type
+        String existingReturnType = existingFunc.getReturnType();
+        if (existingReturnType != null) {
+            returnTypeCombo.setSelectedItem(existingReturnType);
+        }
+        returnPanel.add(returnTypeCombo);
+
+        returnPanel.add(new JLabel("Return variable name:"));
+        JTextField returnVarField = new JTextField(15);
+        returnVarField.setToolTipText("Name of the variable to return (enabled only for non-void functions)");
+
+        // Pre-populate return variable name
+        String existingReturnVarName = existingFunc.getReturnVariableName();
+        if (existingReturnVarName != null) {
+            returnVarField.setText(existingReturnVarName);
+        }
+
+        // Enable/disable based on current return type
+        boolean isVoid = "void".equals(returnTypeCombo.getSelectedItem());
+        returnVarField.setEnabled(!isVoid);
+        returnPanel.add(returnVarField);
+
+        // Add listener to enable/disable return variable name field based on return type
+        returnTypeCombo.addActionListener(e -> {
+            String selectedType = (String) returnTypeCombo.getSelectedItem();
+            boolean isVoidType = "void".equals(selectedType);
+            returnVarField.setEnabled(!isVoidType);
+            if (isVoidType) {
+                returnVarField.setText("");
+            }
+        });
+
+        mainPanel.add(returnPanel, BorderLayout.SOUTH);
+
+        int result = JOptionPane.showConfirmDialog(
+            this,
+            mainPanel,
+            "Edit Function - " + functionName,
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (result != JOptionPane.OK_OPTION) {
+            return; // User cancelled
+        }
+
+        String returnType = (String) returnTypeCombo.getSelectedItem();
+        String returnVarName = returnVarField.getText().trim();
+
+        // Validate return variable name if not void
+        if (!"void".equals(returnType)) {
+            if (returnVarName.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Return variable name is required for non-void functions.",
+                    "Invalid Return Variable",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            if (!returnVarName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Invalid return variable name. Use only letters, numbers, and underscores.\nMust start with a letter or underscore.",
+                    "Invalid Return Variable",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+        }
+
+        // Get updated parameters from list
+        List<FunctionDefinition.Parameter> updatedParameters = new ArrayList<>();
+        for (int i = 0; i < paramListModel.getSize(); i++) {
+            updatedParameters.add(paramListModel.getElementAt(i));
+        }
+
+        // Update the function definition
+        existingFunc.setFormalParameters(updatedParameters);
+        existingFunc.setReturnType(returnType);
+        existingFunc.setReturnVariableName("void".equals(returnType) ? null : returnVarName);
+
+        // Build parameters message
+        StringBuilder paramsMsg = new StringBuilder();
+        if (updatedParameters.isEmpty()) {
+            paramsMsg.append("no parameters");
+        } else {
+            paramsMsg.append("parameters:\n");
+            for (FunctionDefinition.Parameter param : updatedParameters) {
+                paramsMsg.append("  - ").append(param.toString()).append("\n");
+            }
+        }
+
+        String returnMessage;
+        if ("void".equals(returnType)) {
+            returnMessage = "procedure (no return)";
+        } else {
+            returnMessage = "returns " + returnType + " (variable: " + returnVarName + ")";
+        }
+
+        // Update C code generation
+        updateCCode();
+
+        JOptionPane.showMessageDialog(
+            this,
+            "Function '" + functionName + "' updated successfully!\n\n" +
+            paramsMsg.toString() +
+            "Return: " + returnMessage,
+            "Success",
+            JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    /**
+     * Shows a context menu when right-clicking on a function tab
+     */
+    private void showTabContextMenu(MouseEvent e, int tabIndex, String functionName) {
+        JPopupMenu popup = new JPopupMenu();
+
+        JMenuItem editItem = new JMenuItem("✏️ Edit Function '" + functionName + "'");
+        editItem.addActionListener(ev -> editFunction(functionName));
+        popup.add(editItem);
+
+        popup.addSeparator();
+
+        JMenuItem deleteItem = new JMenuItem("🗑️ Delete Function '" + functionName + "'");
+        deleteItem.addActionListener(ev -> deleteFunction(tabIndex, functionName));
+        popup.add(deleteItem);
+
+        popup.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    /**
+     * Deletes a function and its tab
+     */
+    private void deleteFunction(int tabIndex, String functionName) {
+        int confirm = JOptionPane.showConfirmDialog(
+            this,
+            "Are you sure you want to delete function '" + functionName + "'?\nThis action cannot be undone.",
+            "Confirm Delete",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        // Delete function from main panel
+        if (mainFlowchartPanel.deleteFunction(functionName)) {
+            // Remove from function panels map
+            functionPanels.remove(functionName);
+
+            // Remove the tab
+            tabbedPane.removeTabAt(tabIndex);
+
+            // If we just deleted the current tab, switch to Main
+            if (currentFlowchartPanel != mainFlowchartPanel && !functionPanels.containsValue(currentFlowchartPanel)) {
+                tabbedPane.setSelectedIndex(0); // Switch to Main tab
+            }
+
+            JOptionPane.showMessageDialog(
+                this,
+                "Function '" + functionName + "' deleted successfully.",
+                "Success",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        } else {
+            JOptionPane.showMessageDialog(
+                this,
+                "Failed to delete function '" + functionName + "'.",
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
         }
     }
 

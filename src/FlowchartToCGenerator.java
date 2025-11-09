@@ -17,16 +17,24 @@ public class FlowchartToCGenerator {
     private Set<Object> visitedCells;
     private Map<Object, String> loopLabels;
     private int loopCounter;
+    private FlowchartPanel flowchartPanel;  // For accessing function definitions
+    private Map<String, String> variableTypes;  // Track variable types (varName -> type)
 
     public FlowchartToCGenerator(mxGraph graph, Object startCell, Object endCell) {
+        this(graph, startCell, endCell, null);
+    }
+
+    public FlowchartToCGenerator(mxGraph graph, Object startCell, Object endCell, FlowchartPanel flowchartPanel) {
         this.graph = graph;
         this.startCell = startCell;
         this.endCell = endCell;
+        this.flowchartPanel = flowchartPanel;
         this.code = new StringBuilder();
         this.indentLevel = 0;
         this.visitedCells = new HashSet<>();
         this.loopLabels = new HashMap<>();
         this.loopCounter = 0;
+        this.variableTypes = new HashMap<>();
     }
 
     /**
@@ -48,10 +56,36 @@ public class FlowchartToCGenerator {
         appendLine("#include <stdio.h>");
         appendLine("#include <stdlib.h>");
         appendLine("");
+
+        // Genera le funzioni definite (se presenti)
+        if (flowchartPanel != null) {
+            Map<String, FunctionDefinition> functions = flowchartPanel.getFunctions();
+            if (functions != null && !functions.isEmpty()) {
+                for (Map.Entry<String, FunctionDefinition> entry : functions.entrySet()) {
+                    generateFunction(entry.getKey(), entry.getValue());
+                    appendLine("");
+                }
+            }
+        }
+
+        // Main function
         appendLine("int main() {");
         indentLevel++;
 
-        // Genera il corpo
+        // Collect variable types from the flowchart
+        variableTypes.clear();
+        collectVariables(startCell, new HashSet<>());
+
+        // Declare all variables at the beginning
+        for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
+            appendLine(entry.getValue() + " " + entry.getKey() + ";");
+        }
+
+        if (!variableTypes.isEmpty()) {
+            appendLine("");  // Empty line after declarations
+        }
+
+        // Genera il corpo del main
         try {
             generateFromCell(startCell);
         } catch (Exception e) {
@@ -83,8 +117,8 @@ public class FlowchartToCGenerator {
         String style = mxCell.getStyle();
         String value = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
 
-        // Skip Start e Merge points
-        if (FlowchartPanel.START.equals(style)) {
+        // Skip Start, End e Merge points
+        if (FlowchartPanel.START.equals(style) || FlowchartPanel.END.equals(style)) {
             // Passa al prossimo blocco
             Object next = getNextCell(cell);
             generateFromCell(next);
@@ -130,9 +164,18 @@ public class FlowchartToCGenerator {
         } else if (FlowchartPanel.DO_WHILE.equals(style)) {
             generateDoWhileLoop(cell, value);
 
+        } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+            generateFunctionCall(value);
+            Object next = getNextCell(cell);
+            generateFromCell(next);
+
         } else {
-            // Blocco sconosciuto
-            appendLine("// Blocco sconosciuto: " + value);
+            // Blocco sconosciuto - DEBUG: mostra lo style per capire il problema
+            String debugInfo = value;
+            if (style != null && !style.isEmpty()) {
+                debugInfo = value + " [style: " + style + "]";
+            }
+            appendLine("// Blocco sconosciuto: " + debugInfo);
             Object next = getNextCell(cell);
             generateFromCell(next);
         }
@@ -157,8 +200,19 @@ public class FlowchartToCGenerator {
         // Rimuovi eventuale prefisso "I:" o "I: "
         varName = varName.replaceFirst("^I:\\s*", "");
 
-        appendLine("int " + varName + ";");
-        appendLine("scanf(\"%d\", &" + varName + ");");
+        // Determina il formato in base al tipo della variabile
+        String varType = variableTypes.getOrDefault(varName, "int");
+        String scanfFormat;
+
+        if (varType.equals("char*") || varType.startsWith("char[")) {
+            scanfFormat = "%s";
+        } else if (varType.equals("double")) {
+            scanfFormat = "%lf";
+        } else {
+            scanfFormat = "%d";
+        }
+
+        appendLine("scanf(\"" + scanfFormat + "\", &" + varName + ");");
     }
 
     /**
@@ -173,8 +227,22 @@ public class FlowchartToCGenerator {
         if (outputValue.startsWith("\"") && outputValue.endsWith("\"")) {
             appendLine("printf(" + outputValue + ");");
         } else {
-            // È una variabile o espressione
-            appendLine("printf(\"%d\\n\", " + outputValue + ");");
+            // È una variabile o espressione - determina il formato
+            String format = "%d\\n";  // default int
+
+            // Se è una singola variabile, controlla il suo tipo
+            if (outputValue.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                String varType = variableTypes.get(outputValue);
+                if (varType != null) {
+                    if (varType.equals("char*") || varType.startsWith("char[")) {
+                        format = "%s\\n";
+                    } else if (varType.equals("double")) {
+                        format = "%lf\\n";
+                    }
+                }
+            }
+
+            appendLine("printf(\"" + format + "\", " + outputValue + ");");
         }
     }
 
@@ -404,5 +472,310 @@ public class FlowchartToCGenerator {
         }
         code.append(line);
         code.append("\n");
+    }
+
+    // ===== FUNCTION GENERATION =====
+
+    /**
+     * Genera il codice C per una funzione definita
+     */
+    private void generateFunction(String functionName, FunctionDefinition funcDef) {
+        mxGraph funcGraph = funcDef.getFunctionGraph();
+        Object funcStart = funcDef.getStartCell();
+        Object funcEnd = funcDef.getEndCell();
+
+        if (funcGraph == null || funcStart == null || funcEnd == null) {
+            appendLine("// Funzione " + functionName + " incompleta");
+            return;
+        }
+
+        // Get formal parameters from FunctionDefinition
+        List<FunctionDefinition.Parameter> formalParams = funcDef.getFormalParameters();
+        if (formalParams == null) {
+            formalParams = new ArrayList<>();
+        }
+
+        // Get return type from FunctionDefinition
+        String returnType = funcDef.getReturnType();
+        if (returnType == null || returnType.isEmpty()) {
+            returnType = "void";
+        }
+
+        // Convert return type to C type
+        String cReturnType = convertToCType(returnType);
+
+        // Generate function signature
+        StringBuilder signature = new StringBuilder(cReturnType);
+        signature.append(" ").append(functionName).append("(");
+
+        if (formalParams.isEmpty()) {
+            signature.append("void");
+        } else {
+            for (int i = 0; i < formalParams.size(); i++) {
+                if (i > 0) signature.append(", ");
+                FunctionDefinition.Parameter param = formalParams.get(i);
+                String cType = convertToCType(param.getType());
+                signature.append(cType).append(" ").append(param.getName());
+            }
+        }
+        signature.append(") {");
+
+        appendLine(signature.toString());
+        indentLevel++;
+
+        // Save current state
+        mxGraph savedGraph = this.graph;
+        Object savedStart = this.startCell;
+        Object savedEnd = this.endCell;
+        Set<Object> savedVisited = this.visitedCells;
+        Map<Object, String> savedLoopLabels = this.loopLabels;
+        Map<String, String> savedVariableTypes = this.variableTypes;
+
+        // Switch to function graph
+        this.graph = funcGraph;
+        this.startCell = funcStart;
+        this.endCell = funcEnd;
+        this.visitedCells = new HashSet<>();
+        this.loopLabels = new HashMap<>();
+        this.variableTypes = new HashMap<>();
+
+        // Collect variable types from function
+        collectVariables(funcStart, new HashSet<>());
+
+        // Remove parameters from variable declarations (they're already in signature)
+        for (FunctionDefinition.Parameter param : formalParams) {
+            variableTypes.remove(param.getName());
+        }
+
+        // Declare return variable if not void
+        String returnVarName = funcDef.getReturnVariableName();
+        if (returnVarName != null && !returnVarName.isEmpty() && !"void".equals(returnType)) {
+            variableTypes.put(returnVarName, cReturnType);
+        }
+
+        // Declare local variables (including return variable if present)
+        for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
+            appendLine(entry.getValue() + " " + entry.getKey() + ";");
+        }
+
+        if (!variableTypes.isEmpty()) {
+            appendLine("");  // Empty line after declarations
+        }
+
+        // Generate function body
+        try {
+            generateFromCell(funcStart);
+        } catch (Exception e) {
+            appendLine("// Errore nella generazione della funzione: " + e.getMessage());
+        }
+
+        // Add return statement at the end if not void
+        if (returnVarName != null && !returnVarName.isEmpty() && !"void".equals(returnType)) {
+            appendLine("");
+            appendLine("return " + returnVarName + ";");
+        }
+
+        // Restore state
+        this.graph = savedGraph;
+        this.startCell = savedStart;
+        this.endCell = savedEnd;
+        this.visitedCells = savedVisited;
+        this.loopLabels = savedLoopLabels;
+        this.variableTypes = savedVariableTypes;
+
+        indentLevel--;
+        appendLine("}");
+    }
+
+    /**
+     * Gets parameter names from INPUT blocks at the start of a function
+     */
+    private List<String> getFunctionParameterNames(mxGraph funcGraph, Object funcStart) {
+        List<String> params = new ArrayList<>();
+        Object current = getNextCellInGraph(funcGraph, funcStart);
+
+        while (current != null) {
+            if (current instanceof mxCell) {
+                mxCell cell = (mxCell) current;
+                String style = cell.getStyle();
+
+                if (FlowchartPanel.INPUT.equals(style)) {
+                    // Extract parameter name from INPUT block
+                    String value = cell.getValue() != null ? cell.getValue().toString() : "";
+                    String varName = value.trim().replaceFirst("^I:\\s*", "");
+                    params.add(varName);
+                    current = getNextCellInGraph(funcGraph, current);
+                } else {
+                    // No more INPUT blocks
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        return params;
+    }
+
+    /**
+     * Gets the next cell in a specific graph
+     */
+    private Object getNextCellInGraph(mxGraph graph, Object cell) {
+        Object[] edges = graph.getOutgoingEdges(cell);
+        if (edges != null && edges.length > 0) {
+            mxCell edgeCell = (mxCell) edges[0];
+            return edgeCell.getTarget();
+        }
+        return null;
+    }
+
+    /**
+     * Genera codice per un blocco FUNCTION_CALL
+     */
+    private void generateFunctionCall(String value) {
+        String cleanValue = value.trim();
+        // The value should be in the form: functionName(args) or result = functionName(args)
+        // We just output it as-is with a semicolon
+        if (!cleanValue.endsWith(";")) {
+            cleanValue += ";";
+        }
+        appendLine(cleanValue);
+    }
+
+    // ===== VARIABLE TYPE INFERENCE =====
+
+    /**
+     * Collects all variables and their types from the flowchart
+     */
+    private void collectVariables(Object cell, Set<Object> visited) {
+        if (cell == null || cell == endCell || visited.contains(cell)) {
+            return;
+        }
+
+        visited.add(cell);
+
+        mxCell mxCell = (mxCell) cell;
+        String style = mxCell.getStyle();
+        String value = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
+
+        // Process assignments to infer types
+        if (FlowchartPanel.ASSIGNMENT.equals(style)) {
+            processAssignmentForTypes(value);
+        } else if (FlowchartPanel.INPUT.equals(style)) {
+            // INPUT blocks create int variables by default
+            String varName = value.trim().replaceFirst("^I:\\s*", "");
+            if (!variableTypes.containsKey(varName)) {
+                variableTypes.put(varName, "int");
+            }
+        } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+            // FUNCTION_CALL blocks may assign return value to a variable
+            // Format: result = functionName(args) or just functionName(args)
+            if (value.contains("=")) {
+                int equalsIndex = value.indexOf('=');
+                String varName = value.substring(0, equalsIndex).trim();
+                if (!varName.isEmpty() && !variableTypes.containsKey(varName)) {
+                    // Get function name to determine return type
+                    String funcCallExpr = value.substring(equalsIndex + 1).trim();
+                    int parenIndex = funcCallExpr.indexOf('(');
+                    if (parenIndex > 0) {
+                        String functionName = funcCallExpr.substring(0, parenIndex).trim();
+                        // Get return type from function definition
+                        if (flowchartPanel != null) {
+                            FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+                            if (funcDef != null) {
+                                String returnType = funcDef.getReturnType();
+                                if (returnType != null && !"void".equals(returnType)) {
+                                    String cType = convertToCType(returnType);
+                                    variableTypes.put(varName, cType);
+                                }
+                            }
+                        }
+                        // Default to int if function not found
+                        if (!variableTypes.containsKey(varName)) {
+                            variableTypes.put(varName, "int");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Continue recursively through the graph
+        Object[] edges = graph.getOutgoingEdges(cell);
+        for (Object edge : edges) {
+            mxCell edgeCell = (mxCell) edge;
+            Object target = edgeCell.getTarget();
+            collectVariables(target, visited);
+        }
+    }
+
+    /**
+     * Process an assignment to infer variable type
+     */
+    private void processAssignmentForTypes(String assignment) {
+        // Parse: varName = expression
+        int equalsIndex = assignment.indexOf('=');
+        if (equalsIndex == -1) return;
+
+        String varName = assignment.substring(0, equalsIndex).trim();
+        String expression = assignment.substring(equalsIndex + 1).trim();
+
+        // Skip if it's a function call (will be handled separately)
+        if (varName.isEmpty()) return;
+
+        // Infer type from expression
+        String type = inferType(expression);
+
+        // Only set type if not already set (first assignment wins)
+        if (!variableTypes.containsKey(varName)) {
+            variableTypes.put(varName, type);
+        }
+    }
+
+    /**
+     * Infers C type from an expression
+     */
+    private String inferType(String expression) {
+        expression = expression.trim();
+
+        // String literal
+        if (expression.startsWith("\"") && expression.endsWith("\"")) {
+            return "char*";
+        }
+
+        // Floating point number
+        if (expression.matches("-?\\d+\\.\\d+.*")) {
+            return "double";
+        }
+
+        // Integer
+        if (expression.matches("-?\\d+.*")) {
+            return "int";
+        }
+
+        // Function call or expression with existing variables
+        // Default to int
+        return "int";
+    }
+
+    /**
+     * Converts a type name (from dialog) to C type
+     */
+    private String convertToCType(String type) {
+        if (type == null || type.isEmpty()) {
+            return "int";
+        }
+
+        switch (type.toLowerCase()) {
+            case "string":
+                return "char*";
+            case "int":
+                return "int";
+            case "double":
+                return "double";
+            case "void":
+                return "void";
+            default:
+                return "int";
+        }
     }
 }
