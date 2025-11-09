@@ -7,12 +7,39 @@ import java.util.List;
  * Ogni funzione ha un proprio diagramma a blocchi con START/END e variabili locali.
  */
 public class FunctionDefinition {
+
+    /**
+     * Classe interna per rappresentare un parametro formale con nome e tipo
+     */
+    public static class Parameter {
+        private String name;
+        private String type;  // "int", "double", "string"
+
+        public Parameter(String name, String type) {
+            this.name = name;
+            this.type = type;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        @Override
+        public String toString() {
+            return type + " " + name;
+        }
+    }
+
     private String name;
     private mxGraph functionGraph;
     private Object startCell;
     private Object endCell;
-    private List<String> formalParameters;
-    private String returnType;  // "void", "int", "double", "char*", etc.
+    private List<Parameter> formalParameters;
+    private String returnType;  // "void", "int", "double", "string"
 
     public FunctionDefinition(String name) {
         this.name = name;
@@ -24,7 +51,7 @@ public class FunctionDefinition {
         this.returnType = "void";  // Default to void (procedure)
     }
 
-    public FunctionDefinition(String name, List<String> formalParameters, String returnType) {
+    public FunctionDefinition(String name, List<Parameter> formalParameters, String returnType) {
         this(name);
         if (formalParameters != null) {
             this.formalParameters = new ArrayList<>(formalParameters);
@@ -64,12 +91,16 @@ public class FunctionDefinition {
         this.endCell = endCell;
     }
 
-    public List<String> getFormalParameters() {
+    public List<Parameter> getFormalParameters() {
         return formalParameters;
     }
 
-    public void setFormalParameters(List<String> formalParameters) {
+    public void setFormalParameters(List<Parameter> formalParameters) {
         this.formalParameters = formalParameters != null ? new ArrayList<>(formalParameters) : new ArrayList<>();
+    }
+
+    public void addParameter(String name, String type) {
+        this.formalParameters.add(new Parameter(name, type));
     }
 
     public String getReturnType() {

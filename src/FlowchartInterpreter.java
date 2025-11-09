@@ -772,26 +772,27 @@ public class FlowchartInterpreter {
         }
 
         // Get formal parameters from FunctionDefinition
-        List<String> paramNames = funcDef.getFormalParameters();
-        if (paramNames == null) {
-            paramNames = new ArrayList<>();
+        List<FunctionDefinition.Parameter> formalParams = funcDef.getFormalParameters();
+        if (formalParams == null) {
+            formalParams = new ArrayList<>();
         }
 
         mxGraph funcGraph = funcDef.getFunctionGraph();
         Object funcStart = funcDef.getStartCell();
 
         // Validate argument count
-        if (argValues.size() != paramNames.size()) {
+        if (argValues.size() != formalParams.size()) {
             throw new RuntimeException("Function '" + functionName + "' expects " +
-                paramNames.size() + " parameters but got " + argValues.size());
+                formalParams.size() + " parameters but got " + argValues.size());
         }
 
         // Create function context
         FunctionContext context = new FunctionContext(functionName, currentCell, null);
 
         // Set parameter values in local variables
-        for (int i = 0; i < paramNames.size(); i++) {
-            context.setLocalVariable(paramNames.get(i), argValues.get(i));
+        for (int i = 0; i < formalParams.size(); i++) {
+            String paramName = formalParams.get(i).getName();
+            context.setLocalVariable(paramName, argValues.get(i));
         }
 
         // Push context onto call stack
@@ -808,7 +809,7 @@ public class FlowchartInterpreter {
         output.append("▶ CALLING FUNCTION: ").append(functionName).append("(");
         for (int i = 0; i < argValues.size(); i++) {
             if (i > 0) output.append(", ");
-            output.append(paramNames.get(i)).append("=").append(argValues.get(i));
+            output.append(formalParams.get(i).getName()).append("=").append(argValues.get(i));
         }
         output.append(")\n");
 

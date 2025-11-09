@@ -485,10 +485,10 @@ public class FlowchartToCGenerator {
             return;
         }
 
-        // Get parameter names from FunctionDefinition (stored formal parameters)
-        List<String> paramNames = funcDef.getFormalParameters();
-        if (paramNames == null) {
-            paramNames = new ArrayList<>();
+        // Get formal parameters from FunctionDefinition
+        List<FunctionDefinition.Parameter> formalParams = funcDef.getFormalParameters();
+        if (formalParams == null) {
+            formalParams = new ArrayList<>();
         }
 
         // Get return type from FunctionDefinition
@@ -497,16 +497,21 @@ public class FlowchartToCGenerator {
             returnType = "void";
         }
 
+        // Convert return type to C type
+        String cReturnType = convertToCType(returnType);
+
         // Generate function signature
-        StringBuilder signature = new StringBuilder(returnType);
+        StringBuilder signature = new StringBuilder(cReturnType);
         signature.append(" ").append(functionName).append("(");
 
-        if (paramNames.isEmpty()) {
+        if (formalParams.isEmpty()) {
             signature.append("void");
         } else {
-            for (int i = 0; i < paramNames.size(); i++) {
+            for (int i = 0; i < formalParams.size(); i++) {
                 if (i > 0) signature.append(", ");
-                signature.append("int ").append(paramNames.get(i));
+                FunctionDefinition.Parameter param = formalParams.get(i);
+                String cType = convertToCType(param.getType());
+                signature.append(cType).append(" ").append(param.getName());
             }
         }
         signature.append(") {");
@@ -534,8 +539,8 @@ public class FlowchartToCGenerator {
         collectVariables(funcStart, new HashSet<>());
 
         // Remove parameters from variable declarations (they're already in signature)
-        for (String paramName : paramNames) {
-            variableTypes.remove(paramName);
+        for (FunctionDefinition.Parameter param : formalParams) {
+            variableTypes.remove(param.getName());
         }
 
         // Declare local variables
@@ -704,5 +709,27 @@ public class FlowchartToCGenerator {
         // Function call or expression with existing variables
         // Default to int
         return "int";
+    }
+
+    /**
+     * Converts a type name (from dialog) to C type
+     */
+    private String convertToCType(String type) {
+        if (type == null || type.isEmpty()) {
+            return "int";
+        }
+
+        switch (type.toLowerCase()) {
+            case "string":
+                return "char*";
+            case "int":
+                return "int";
+            case "double":
+                return "double";
+            case "void":
+                return "void";
+            default:
+                return "int";
+        }
     }
 }

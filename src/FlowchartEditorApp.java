@@ -875,30 +875,90 @@ public class FlowchartEditorApp extends JFrame {
 
     private void createNewFunction() {
         // Create custom dialog for function name, parameters, and return type
-        JPanel panel = new JPanel(new GridLayout(4, 2, 5, 5));
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
 
-        JLabel nameLabel = new JLabel("Function name:");
+        // Top panel: Function name
+        JPanel namePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        namePanel.add(new JLabel("Function name:"));
         JTextField nameField = new JTextField(20);
+        namePanel.add(nameField);
+        mainPanel.add(namePanel, BorderLayout.NORTH);
 
-        JLabel paramsLabel = new JLabel("Parameters (comma-separated):");
-        JTextField paramsField = new JTextField(20);
-        paramsField.setToolTipText("e.g., x, y, z or leave empty for no parameters");
+        // Center panel: Parameters list with add/remove buttons
+        JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
+        centerPanel.setBorder(BorderFactory.createTitledBorder("Formal Parameters"));
 
-        JLabel returnTypeLabel = new JLabel("Return type:");
-        String[] returnTypes = {"void", "int", "double", "char*"};
+        DefaultListModel<FunctionDefinition.Parameter> paramListModel = new DefaultListModel<>();
+        JList<FunctionDefinition.Parameter> paramList = new JList<>(paramListModel);
+        paramList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane paramScrollPane = new JScrollPane(paramList);
+        paramScrollPane.setPreferredSize(new Dimension(300, 100));
+        centerPanel.add(paramScrollPane, BorderLayout.CENTER);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton addParamBtn = new JButton("➕ Add Parameter");
+        JButton removeParamBtn = new JButton("➖ Remove Selected");
+
+        addParamBtn.addActionListener(e -> {
+            // Show dialog to add parameter
+            JPanel paramPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+            JTextField paramNameField = new JTextField(15);
+            String[] types = {"int", "double", "string"};
+            JComboBox<String> paramTypeCombo = new JComboBox<>(types);
+
+            paramPanel.add(new JLabel("Parameter name:"));
+            paramPanel.add(paramNameField);
+            paramPanel.add(new JLabel("Parameter type:"));
+            paramPanel.add(paramTypeCombo);
+
+            int result = JOptionPane.showConfirmDialog(this, paramPanel, "Add Parameter",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+            if (result == JOptionPane.OK_OPTION) {
+                String paramName = paramNameField.getText().trim();
+                String paramType = (String) paramTypeCombo.getSelectedItem();
+
+                if (paramName.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Parameter name cannot be empty.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (!paramName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                    JOptionPane.showMessageDialog(this,
+                        "Invalid parameter name. Use only letters, numbers, and underscores.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                paramListModel.addElement(new FunctionDefinition.Parameter(paramName, paramType));
+            }
+        });
+
+        removeParamBtn.addActionListener(e -> {
+            int selectedIndex = paramList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                paramListModel.remove(selectedIndex);
+            }
+        });
+
+        buttonPanel.add(addParamBtn);
+        buttonPanel.add(removeParamBtn);
+        centerPanel.add(buttonPanel, BorderLayout.SOUTH);
+        mainPanel.add(centerPanel, BorderLayout.CENTER);
+
+        // Bottom panel: Return type
+        JPanel returnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        returnPanel.add(new JLabel("Return type:"));
+        String[] returnTypes = {"void", "int", "double", "string"};
         JComboBox<String> returnTypeCombo = new JComboBox<>(returnTypes);
         returnTypeCombo.setToolTipText("Select void for procedures (no return value)");
-
-        panel.add(nameLabel);
-        panel.add(nameField);
-        panel.add(paramsLabel);
-        panel.add(paramsField);
-        panel.add(returnTypeLabel);
-        panel.add(returnTypeCombo);
+        returnPanel.add(returnTypeCombo);
+        mainPanel.add(returnPanel, BorderLayout.SOUTH);
 
         int result = JOptionPane.showConfirmDialog(
             this,
-            panel,
+            mainPanel,
             "New Function",
             JOptionPane.OK_CANCEL_OPTION,
             JOptionPane.PLAIN_MESSAGE
@@ -909,7 +969,6 @@ public class FlowchartEditorApp extends JFrame {
         }
 
         String functionName = nameField.getText().trim();
-        String paramsText = paramsField.getText().trim();
         String returnType = (String) returnTypeCombo.getSelectedItem();
 
         if (functionName.isEmpty()) {
@@ -944,26 +1003,10 @@ public class FlowchartEditorApp extends JFrame {
             return;
         }
 
-        // Parse parameters
-        List<String> parameters = new ArrayList<>();
-        if (!paramsText.isEmpty()) {
-            String[] paramArray = paramsText.split(",");
-            for (String param : paramArray) {
-                String paramName = param.trim();
-                if (!paramName.isEmpty()) {
-                    // Validate parameter name
-                    if (!paramName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-                        JOptionPane.showMessageDialog(
-                            this,
-                            "Invalid parameter name: '" + paramName + "'.\nUse only letters, numbers, and underscores.",
-                            "Invalid Parameter",
-                            JOptionPane.ERROR_MESSAGE
-                        );
-                        return;
-                    }
-                    parameters.add(paramName);
-                }
-            }
+        // Get parameters from list
+        List<FunctionDefinition.Parameter> parameters = new ArrayList<>();
+        for (int i = 0; i < paramListModel.getSize(); i++) {
+            parameters.add(paramListModel.getElementAt(i));
         }
 
         // Create function in main panel with parameters and return type
@@ -981,13 +1024,23 @@ public class FlowchartEditorApp extends JFrame {
             // Switch to the new tab
             tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
 
-            String paramsMessage = parameters.isEmpty() ? "no parameters" : "parameters: " + String.join(", ", parameters);
+            // Build parameters message
+            StringBuilder paramsMsg = new StringBuilder();
+            if (parameters.isEmpty()) {
+                paramsMsg.append("no parameters");
+            } else {
+                paramsMsg.append("parameters:\n");
+                for (FunctionDefinition.Parameter param : parameters) {
+                    paramsMsg.append("  - ").append(param.toString()).append("\n");
+                }
+            }
+
             String returnMessage = "void".equals(returnType) ? "procedure (no return)" : "returns " + returnType;
             JOptionPane.showMessageDialog(
                 this,
-                "Function '" + functionName + "' created successfully!\n" +
-                "Parameters: " + paramsMessage + "\n" +
-                "Type: " + returnMessage + "\n\n" +
+                "Function '" + functionName + "' created successfully!\n\n" +
+                paramsMsg.toString() +
+                "Return type: " + returnMessage + "\n\n" +
                 "You can now design the function body using flowchart blocks.\n" +
                 "Use FUNCTION_CALL blocks to call this function from other parts of the program.",
                 "Success",
