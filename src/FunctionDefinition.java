@@ -40,6 +40,7 @@ public class FunctionDefinition {
     private Object endCell;
     private List<Parameter> formalParameters;
     private String returnType;  // "void", "int", "double", "string"
+    private String returnVariableName;  // Nome della variabile di ritorno (null se void)
 
     public FunctionDefinition(String name) {
         this.name = name;
@@ -51,12 +52,13 @@ public class FunctionDefinition {
         this.returnType = "void";  // Default to void (procedure)
     }
 
-    public FunctionDefinition(String name, List<Parameter> formalParameters, String returnType) {
+    public FunctionDefinition(String name, List<Parameter> formalParameters, String returnType, String returnVariableName) {
         this(name);
         if (formalParameters != null) {
             this.formalParameters = new ArrayList<>(formalParameters);
         }
         this.returnType = returnType != null ? returnType : "void";
+        this.returnVariableName = returnVariableName;
     }
 
     public String getName() {
@@ -109,5 +111,13 @@ public class FunctionDefinition {
 
     public void setReturnType(String returnType) {
         this.returnType = returnType != null ? returnType : "void";
+    }
+
+    public String getReturnVariableName() {
+        return returnVariableName;
+    }
+
+    public void setReturnVariableName(String returnVariableName) {
+        this.returnVariableName = returnVariableName;
     }
 }

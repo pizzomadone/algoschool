@@ -947,13 +947,32 @@ public class FlowchartEditorApp extends JFrame {
         centerPanel.add(buttonPanel, BorderLayout.SOUTH);
         mainPanel.add(centerPanel, BorderLayout.CENTER);
 
-        // Bottom panel: Return type
-        JPanel returnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // Bottom panel: Return type and return variable name
+        JPanel returnPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+        returnPanel.setBorder(BorderFactory.createTitledBorder("Return Value"));
+
         returnPanel.add(new JLabel("Return type:"));
         String[] returnTypes = {"void", "int", "double", "string"};
         JComboBox<String> returnTypeCombo = new JComboBox<>(returnTypes);
         returnTypeCombo.setToolTipText("Select void for procedures (no return value)");
         returnPanel.add(returnTypeCombo);
+
+        returnPanel.add(new JLabel("Return variable name:"));
+        JTextField returnVarField = new JTextField(15);
+        returnVarField.setEnabled(false);  // Disabled by default (void selected)
+        returnVarField.setToolTipText("Name of the variable to return (enabled only for non-void functions)");
+        returnPanel.add(returnVarField);
+
+        // Add listener to enable/disable return variable name field based on return type
+        returnTypeCombo.addActionListener(e -> {
+            String selectedType = (String) returnTypeCombo.getSelectedItem();
+            boolean isVoid = "void".equals(selectedType);
+            returnVarField.setEnabled(!isVoid);
+            if (isVoid) {
+                returnVarField.setText("");
+            }
+        });
+
         mainPanel.add(returnPanel, BorderLayout.SOUTH);
 
         int result = JOptionPane.showConfirmDialog(
@@ -970,6 +989,7 @@ public class FlowchartEditorApp extends JFrame {
 
         String functionName = nameField.getText().trim();
         String returnType = (String) returnTypeCombo.getSelectedItem();
+        String returnVarName = returnVarField.getText().trim();
 
         if (functionName.isEmpty()) {
             JOptionPane.showMessageDialog(
@@ -1003,14 +1023,38 @@ public class FlowchartEditorApp extends JFrame {
             return;
         }
 
+        // Validate return variable name if not void
+        if (!"void".equals(returnType)) {
+            if (returnVarName.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Return variable name is required for non-void functions.",
+                    "Invalid Return Variable",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            if (!returnVarName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Invalid return variable name. Use only letters, numbers, and underscores.\nMust start with a letter or underscore.",
+                    "Invalid Return Variable",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+        }
+
         // Get parameters from list
         List<FunctionDefinition.Parameter> parameters = new ArrayList<>();
         for (int i = 0; i < paramListModel.getSize(); i++) {
             parameters.add(paramListModel.getElementAt(i));
         }
 
-        // Create function in main panel with parameters and return type
-        FunctionDefinition funcDef = new FunctionDefinition(functionName, parameters, returnType);
+        // Create function in main panel with parameters, return type, and return variable name
+        String finalReturnVarName = "void".equals(returnType) ? null : returnVarName;
+        FunctionDefinition funcDef = new FunctionDefinition(functionName, parameters, returnType, finalReturnVarName);
         if (mainFlowchartPanel.createFunctionWithDefinition(functionName, funcDef)) {
             // Create a new FlowchartPanel for this function
             FlowchartPanel functionPanel = new FlowchartPanel();
@@ -1035,12 +1079,18 @@ public class FlowchartEditorApp extends JFrame {
                 }
             }
 
-            String returnMessage = "void".equals(returnType) ? "procedure (no return)" : "returns " + returnType;
+            String returnMessage;
+            if ("void".equals(returnType)) {
+                returnMessage = "procedure (no return)";
+            } else {
+                returnMessage = "returns " + returnType + " (variable: " + returnVarName + ")";
+            }
+
             JOptionPane.showMessageDialog(
                 this,
                 "Function '" + functionName + "' created successfully!\n\n" +
                 paramsMsg.toString() +
-                "Return type: " + returnMessage + "\n\n" +
+                "Return: " + returnMessage + "\n\n" +
                 "You can now design the function body using flowchart blocks.\n" +
                 "Use FUNCTION_CALL blocks to call this function from other parts of the program.",
                 "Success",

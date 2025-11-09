@@ -543,7 +543,13 @@ public class FlowchartToCGenerator {
             variableTypes.remove(param.getName());
         }
 
-        // Declare local variables
+        // Declare return variable if not void
+        String returnVarName = funcDef.getReturnVariableName();
+        if (returnVarName != null && !returnVarName.isEmpty() && !"void".equals(returnType)) {
+            variableTypes.put(returnVarName, cReturnType);
+        }
+
+        // Declare local variables (including return variable if present)
         for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
             appendLine(entry.getValue() + " " + entry.getKey() + ";");
         }
@@ -557,6 +563,12 @@ public class FlowchartToCGenerator {
             generateFromCell(funcStart);
         } catch (Exception e) {
             appendLine("// Errore nella generazione della funzione: " + e.getMessage());
+        }
+
+        // Add return statement at the end if not void
+        if (returnVarName != null && !returnVarName.isEmpty() && !"void".equals(returnType)) {
+            appendLine("");
+            appendLine("return " + returnVarName + ";");
         }
 
         // Restore state
