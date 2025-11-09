@@ -117,8 +117,8 @@ public class FlowchartToCGenerator {
         String style = mxCell.getStyle();
         String value = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
 
-        // Skip Start e Merge points
-        if (FlowchartPanel.START.equals(style)) {
+        // Skip Start, End e Merge points
+        if (FlowchartPanel.START.equals(style) || FlowchartPanel.END.equals(style)) {
             // Passa al prossimo blocco
             Object next = getNextCell(cell);
             generateFromCell(next);
@@ -170,8 +170,12 @@ public class FlowchartToCGenerator {
             generateFromCell(next);
 
         } else {
-            // Blocco sconosciuto
-            appendLine("// Blocco sconosciuto: " + value);
+            // Blocco sconosciuto - DEBUG: mostra lo style per capire il problema
+            String debugInfo = value;
+            if (style != null && !style.isEmpty()) {
+                debugInfo = value + " [style: " + style + "]";
+            }
+            appendLine("// Blocco sconosciuto: " + debugInfo);
             Object next = getNextCell(cell);
             generateFromCell(next);
         }

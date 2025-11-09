@@ -278,6 +278,12 @@ public class FlowchartEditorApp extends JFrame {
         // Aggiungi un listener al modello del grafo per aggiornare il codice C in real-time
         currentFlowchartPanel.getGraph().getModel().addListener(com.mxgraph.util.mxEvent.CHANGE,
             (sender, evt) -> {
+                // NON aggiornare il codice C durante l'esecuzione
+                // (quando l'interprete evidenzia le celle, trigger eventi CHANGE)
+                if (interpreter != null && interpreter.isRunning()) {
+                    return;  // Skip update durante esecuzione
+                }
+
                 // Aggiorna il codice C quando il grafo cambia
                 SwingUtilities.invokeLater(() -> updateCCode());
             }
@@ -859,6 +865,23 @@ public class FlowchartEditorApp extends JFrame {
      */
     private void updateCCode() {
         try {
+            // Se siamo su una funzione tab, sincronizza il grafo prima di generare
+            if (currentFlowchartPanel != null && currentFlowchartPanel != mainFlowchartPanel) {
+                // Find the function name for current panel
+                String currentFunctionName = null;
+                for (Map.Entry<String, FlowchartPanel> entry : functionPanels.entrySet()) {
+                    if (entry.getValue() == currentFlowchartPanel) {
+                        currentFunctionName = entry.getKey();
+                        break;
+                    }
+                }
+
+                // Sync function graph back to main panel BEFORE generating code
+                if (currentFunctionName != null) {
+                    syncFunctionToMain(currentFunctionName, currentFlowchartPanel);
+                }
+            }
+
             // ALWAYS generate from main panel to show complete program
             // This fixes the bug where function code appears in main() when viewing function tabs
             FlowchartToCGenerator generator = new FlowchartToCGenerator(
