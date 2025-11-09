@@ -484,8 +484,11 @@ public class FlowchartToCGenerator {
             return;
         }
 
-        // Get parameter names from INPUT blocks
-        List<String> paramNames = getFunctionParameterNames(funcGraph, funcStart);
+        // Get parameter names from FunctionDefinition (stored formal parameters)
+        List<String> paramNames = funcDef.getFormalParameters();
+        if (paramNames == null) {
+            paramNames = new ArrayList<>();
+        }
 
         // Generate function signature
         StringBuilder signature = new StringBuilder("int ");

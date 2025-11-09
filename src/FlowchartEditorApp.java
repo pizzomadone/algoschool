@@ -3,7 +3,9 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -854,10 +856,12 @@ public class FlowchartEditorApp extends JFrame {
      */
     private void updateCCode() {
         try {
+            // ALWAYS generate from main panel to show complete program
+            // This fixes the bug where function code appears in main() when viewing function tabs
             FlowchartToCGenerator generator = new FlowchartToCGenerator(
-                currentFlowchartPanel.getGraph(),
-                currentFlowchartPanel.getStartCell(),
-                currentFlowchartPanel.getEndCell(),
+                mainFlowchartPanel.getGraph(),
+                mainFlowchartPanel.getStartCell(),
+                mainFlowchartPanel.getEndCell(),
                 mainFlowchartPanel  // Pass main panel for function access
             );
             String code = generator.generateCode();
@@ -870,18 +874,45 @@ public class FlowchartEditorApp extends JFrame {
     // ===== FUNCTION MANAGEMENT METHODS =====
 
     private void createNewFunction() {
-        String functionName = JOptionPane.showInputDialog(
+        // Create custom dialog for function name and parameters
+        JPanel panel = new JPanel(new GridLayout(3, 2, 5, 5));
+
+        JLabel nameLabel = new JLabel("Function name:");
+        JTextField nameField = new JTextField(20);
+
+        JLabel paramsLabel = new JLabel("Parameters (comma-separated):");
+        JTextField paramsField = new JTextField(20);
+        paramsField.setToolTipText("e.g., x, y, z or leave empty for no parameters");
+
+        panel.add(nameLabel);
+        panel.add(nameField);
+        panel.add(paramsLabel);
+        panel.add(paramsField);
+
+        int result = JOptionPane.showConfirmDialog(
             this,
-            "Enter function name:",
+            panel,
             "New Function",
+            JOptionPane.OK_CANCEL_OPTION,
             JOptionPane.PLAIN_MESSAGE
         );
 
-        if (functionName == null || functionName.trim().isEmpty()) {
+        if (result != JOptionPane.OK_OPTION) {
             return; // User cancelled
         }
 
-        functionName = functionName.trim();
+        String functionName = nameField.getText().trim();
+        String paramsText = paramsField.getText().trim();
+
+        if (functionName.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Function name cannot be empty.",
+                "Invalid Name",
+                JOptionPane.ERROR_MESSAGE
+            );
+            return;
+        }
 
         // Validate function name
         if (!functionName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
@@ -905,10 +936,41 @@ public class FlowchartEditorApp extends JFrame {
             return;
         }
 
-        // Create function in main panel (to keep track of all functions)
-        if (mainFlowchartPanel.createFunction(functionName)) {
+        // Parse parameters
+        List<String> parameters = new ArrayList<>();
+        if (!paramsText.isEmpty()) {
+            String[] paramArray = paramsText.split(",");
+            for (String param : paramArray) {
+                String paramName = param.trim();
+                if (!paramName.isEmpty()) {
+                    // Validate parameter name
+                    if (!paramName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "Invalid parameter name: '" + paramName + "'.\nUse only letters, numbers, and underscores.",
+                            "Invalid Parameter",
+                            JOptionPane.ERROR_MESSAGE
+                        );
+                        return;
+                    }
+                    parameters.add(paramName);
+                }
+            }
+        }
+
+        // Create function in main panel with parameters
+        FunctionDefinition funcDef = new FunctionDefinition(functionName, parameters);
+        if (mainFlowchartPanel.createFunctionWithDefinition(functionName, funcDef)) {
             // Create a new FlowchartPanel for this function
             FlowchartPanel functionPanel = new FlowchartPanel();
+
+            // Pre-populate function with INPUT blocks for each parameter
+            if (!parameters.isEmpty()) {
+                Object currentCell = functionPanel.getStartCell();
+                for (String paramName : parameters) {
+                    currentCell = functionPanel.insertInputBlockAfter(currentCell, paramName);
+                }
+            }
 
             // Store the function panel
             functionPanels.put(functionName, functionPanel);
@@ -919,9 +981,10 @@ public class FlowchartEditorApp extends JFrame {
             // Switch to the new tab
             tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
 
+            String paramsMessage = parameters.isEmpty() ? "no parameters" : "parameters: " + String.join(", ", parameters);
             JOptionPane.showMessageDialog(
                 this,
-                "Function '" + functionName + "' created successfully!\nYou can now design it using flowchart blocks.\n\nUse INPUT blocks at the beginning to define parameters.\nUse RETURN block to return a value.",
+                "Function '" + functionName + "' created successfully with " + paramsMessage + "!\n\nThe parameters have been added as INPUT blocks.\nUse RETURN block to return a value.",
                 "Success",
                 JOptionPane.INFORMATION_MESSAGE
             );

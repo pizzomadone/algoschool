@@ -1348,6 +1348,87 @@ public class FlowchartPanel extends JPanel {
     }
 
     /**
+     * Creates a new function with a pre-defined FunctionDefinition.
+     *
+     * @param functionName Name of the function
+     * @param functionDef The function definition with parameters
+     * @return true if created successfully, false if function already exists
+     */
+    public boolean createFunctionWithDefinition(String functionName, FunctionDefinition functionDef) {
+        if (functionName == null || functionName.trim().isEmpty() || functionDef == null) {
+            return false;
+        }
+
+        if (functions.containsKey(functionName) || "main".equals(functionName)) {
+            return false; // Function already exists or name is reserved
+        }
+
+        // Initialize the function graph with styles
+        mxGraph funcGraph = functionDef.getFunctionGraph();
+        funcGraph.setStylesheet(graph.getStylesheet()); // Copy styles from main graph
+
+        // Create Start and End blocks for the function
+        Object parent = funcGraph.getDefaultParent();
+        funcGraph.getModel().beginUpdate();
+        try {
+            Object funcStart = funcGraph.insertVertex(parent, null, "Start", 300, 50, 100, 50, START);
+            Object funcEnd = funcGraph.insertVertex(parent, null, "End", 300, 450, 100, 50, END);
+            funcGraph.insertEdge(parent, null, "", funcStart, funcEnd);
+
+            functionDef.setStartCell(funcStart);
+            functionDef.setEndCell(funcEnd);
+        } finally {
+            funcGraph.getModel().endUpdate();
+        }
+
+        functions.put(functionName, functionDef);
+        return true;
+    }
+
+    /**
+     * Inserts an INPUT block after the given cell.
+     *
+     * @param afterCell The cell after which to insert the INPUT block
+     * @param variableName The name of the input variable
+     * @return The newly created INPUT cell
+     */
+    public Object insertInputBlockAfter(Object afterCell, String variableName) {
+        if (afterCell == null) {
+            return null;
+        }
+
+        graph.getModel().beginUpdate();
+        try {
+            // Find the edge from afterCell
+            Object[] edges = graph.getOutgoingEdges(afterCell);
+            if (edges == null || edges.length == 0) {
+                return null;
+            }
+
+            com.mxgraph.model.mxCell edge = (com.mxgraph.model.mxCell) edges[0];
+            Object targetCell = edge.getTarget();
+
+            // Remove the old edge
+            graph.removeCells(new Object[]{edge});
+
+            // Create the INPUT block
+            Object parent = graph.getDefaultParent();
+            Object inputCell = graph.insertVertex(parent, null, variableName, 0, 0, 150, 60, INPUT);
+
+            // Insert edges: afterCell -> inputCell -> targetCell
+            graph.insertEdge(parent, null, "", afterCell, inputCell);
+            graph.insertEdge(parent, null, "", inputCell, targetCell);
+
+            // Apply layout
+            applyHierarchicalLayout();
+
+            return inputCell;
+        } finally {
+            graph.getModel().endUpdate();
+        }
+    }
+
+    /**
      * Deletes a function.
      *
      * @param functionName Name of the function to delete

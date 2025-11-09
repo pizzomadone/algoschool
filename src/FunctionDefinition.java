@@ -1,4 +1,6 @@
 import com.mxgraph.view.mxGraph;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Rappresenta la definizione di una funzione nel flowchart.
@@ -9,6 +11,7 @@ public class FunctionDefinition {
     private mxGraph functionGraph;
     private Object startCell;
     private Object endCell;
+    private List<String> formalParameters;
 
     public FunctionDefinition(String name) {
         this.name = name;
@@ -16,6 +19,14 @@ public class FunctionDefinition {
         this.functionGraph.setAllowDanglingEdges(false);
         this.functionGraph.setCellsEditable(false);
         this.functionGraph.setConnectableEdges(false);
+        this.formalParameters = new ArrayList<>();
+    }
+
+    public FunctionDefinition(String name, List<String> formalParameters) {
+        this(name);
+        if (formalParameters != null) {
+            this.formalParameters = new ArrayList<>(formalParameters);
+        }
     }
 
     public String getName() {
@@ -48,5 +59,13 @@ public class FunctionDefinition {
 
     public void setEndCell(Object endCell) {
         this.endCell = endCell;
+    }
+
+    public List<String> getFormalParameters() {
+        return formalParameters;
+    }
+
+    public void setFormalParameters(List<String> formalParameters) {
+        this.formalParameters = formalParameters != null ? new ArrayList<>(formalParameters) : new ArrayList<>();
     }
 }
