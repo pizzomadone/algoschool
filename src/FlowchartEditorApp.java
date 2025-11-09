@@ -874,8 +874,8 @@ public class FlowchartEditorApp extends JFrame {
     // ===== FUNCTION MANAGEMENT METHODS =====
 
     private void createNewFunction() {
-        // Create custom dialog for function name and parameters
-        JPanel panel = new JPanel(new GridLayout(3, 2, 5, 5));
+        // Create custom dialog for function name, parameters, and return type
+        JPanel panel = new JPanel(new GridLayout(4, 2, 5, 5));
 
         JLabel nameLabel = new JLabel("Function name:");
         JTextField nameField = new JTextField(20);
@@ -884,10 +884,17 @@ public class FlowchartEditorApp extends JFrame {
         JTextField paramsField = new JTextField(20);
         paramsField.setToolTipText("e.g., x, y, z or leave empty for no parameters");
 
+        JLabel returnTypeLabel = new JLabel("Return type:");
+        String[] returnTypes = {"void", "int", "double", "char*"};
+        JComboBox<String> returnTypeCombo = new JComboBox<>(returnTypes);
+        returnTypeCombo.setToolTipText("Select void for procedures (no return value)");
+
         panel.add(nameLabel);
         panel.add(nameField);
         panel.add(paramsLabel);
         panel.add(paramsField);
+        panel.add(returnTypeLabel);
+        panel.add(returnTypeCombo);
 
         int result = JOptionPane.showConfirmDialog(
             this,
@@ -903,6 +910,7 @@ public class FlowchartEditorApp extends JFrame {
 
         String functionName = nameField.getText().trim();
         String paramsText = paramsField.getText().trim();
+        String returnType = (String) returnTypeCombo.getSelectedItem();
 
         if (functionName.isEmpty()) {
             JOptionPane.showMessageDialog(
@@ -958,19 +966,11 @@ public class FlowchartEditorApp extends JFrame {
             }
         }
 
-        // Create function in main panel with parameters
-        FunctionDefinition funcDef = new FunctionDefinition(functionName, parameters);
+        // Create function in main panel with parameters and return type
+        FunctionDefinition funcDef = new FunctionDefinition(functionName, parameters, returnType);
         if (mainFlowchartPanel.createFunctionWithDefinition(functionName, funcDef)) {
             // Create a new FlowchartPanel for this function
             FlowchartPanel functionPanel = new FlowchartPanel();
-
-            // Pre-populate function with INPUT blocks for each parameter
-            if (!parameters.isEmpty()) {
-                Object currentCell = functionPanel.getStartCell();
-                for (String paramName : parameters) {
-                    currentCell = functionPanel.insertInputBlockAfter(currentCell, paramName);
-                }
-            }
 
             // Store the function panel
             functionPanels.put(functionName, functionPanel);
@@ -982,9 +982,14 @@ public class FlowchartEditorApp extends JFrame {
             tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
 
             String paramsMessage = parameters.isEmpty() ? "no parameters" : "parameters: " + String.join(", ", parameters);
+            String returnMessage = "void".equals(returnType) ? "procedure (no return)" : "returns " + returnType;
             JOptionPane.showMessageDialog(
                 this,
-                "Function '" + functionName + "' created successfully with " + paramsMessage + "!\n\nThe parameters have been added as INPUT blocks.\nUse RETURN block to return a value.",
+                "Function '" + functionName + "' created successfully!\n" +
+                "Parameters: " + paramsMessage + "\n" +
+                "Type: " + returnMessage + "\n\n" +
+                "You can now design the function body using flowchart blocks.\n" +
+                "Use FUNCTION_CALL blocks to call this function from other parts of the program.",
                 "Success",
                 JOptionPane.INFORMATION_MESSAGE
             );

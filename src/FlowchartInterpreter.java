@@ -256,10 +256,10 @@ public class FlowchartInterpreter {
                 output.append(result ? " (repeating loop body)\n" : " (exiting loop)\n");
                 moveToLoopBranch(cell, result);
 
-            } else if (FlowchartPanel.RETURN.equals(style)) {
-                // Blocco Return - restituisci valore dalla funzione
-                executeReturn(value);
-                // Non chiamare moveToNext, executeReturn gestisce il salto
+            } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+                // Blocco Function Call - chiama una funzione
+                executeFunctionCallBlock(value);
+                moveToNext(cell);
 
             } else if (FlowchartPanel.MERGE.equals(style)) {
                 // Merge point - passa semplicemente al prossimo
@@ -771,10 +771,14 @@ public class FlowchartInterpreter {
             throw new RuntimeException("Function '" + functionName + "' not found");
         }
 
-        // Get INPUT blocks from the function to determine parameter names
+        // Get formal parameters from FunctionDefinition
+        List<String> paramNames = funcDef.getFormalParameters();
+        if (paramNames == null) {
+            paramNames = new ArrayList<>();
+        }
+
         mxGraph funcGraph = funcDef.getFunctionGraph();
         Object funcStart = funcDef.getStartCell();
-        List<String> paramNames = getFunctionParameterNames(funcGraph, funcStart);
 
         // Validate argument count
         if (argValues.size() != paramNames.size()) {
@@ -808,16 +812,8 @@ public class FlowchartInterpreter {
         }
         output.append(")\n");
 
-        // Execute function body until RETURN or END
+        // Execute function body until END
         while (currentCell != null && currentCell != funcDef.getEndCell()) {
-            mxCell cell = (mxCell) currentCell;
-            String style = cell.getStyle();
-
-            if (FlowchartPanel.RETURN.equals(style)) {
-                // Return statement encountered
-                break;
-            }
-
             // Execute current step
             executeStep();
 
@@ -831,46 +827,21 @@ public class FlowchartInterpreter {
         FunctionContext returnedContext = callStack.pop();
         graph = previousGraph;
 
-        // Get return value (stored in a special variable or null for procedures)
+        // Get return value (stored in a special variable or 0 for void functions)
         Object returnValue = returnedContext.getLocalVariable("__return_value__");
         if (returnValue == null) {
-            returnValue = 0; // Default return value for procedures
+            // For void functions, return 0 (not used)
+            returnValue = 0;
         }
 
-        output.append("▶ FUNCTION ").append(functionName).append(" RETURNED: ").append(returnValue).append("\n");
+        String returnType = funcDef.getReturnType();
+        if (returnType != null && !"void".equals(returnType)) {
+            output.append("▶ FUNCTION ").append(functionName).append(" RETURNED: ").append(returnValue).append("\n");
+        } else {
+            output.append("▶ FUNCTION ").append(functionName).append(" COMPLETED\n");
+        }
 
         return returnValue;
-    }
-
-    /**
-     * Gets parameter names from INPUT blocks at the start of a function.
-     */
-    private List<String> getFunctionParameterNames(mxGraph funcGraph, Object funcStart) {
-        List<String> params = new ArrayList<>();
-        Object current = getNextCell(funcStart);
-
-        while (current != null) {
-            mxCell cell = (mxCell) current;
-            String style = cell.getStyle();
-
-            if (FlowchartPanel.INPUT.equals(style)) {
-                // Extract parameter name from INPUT block
-                String value = (String) cell.getValue();
-                Matcher matcher = INPUT_PATTERN.matcher(value);
-                if (matcher.matches()) {
-                    String varName = matcher.group(1).trim();
-                    params.add(varName);
-                } else {
-                    params.add(value.trim());
-                }
-                current = getNextCell(current);
-            } else {
-                // No more INPUT blocks
-                break;
-            }
-        }
-
-        return params;
     }
 
     /**
@@ -886,36 +857,31 @@ public class FlowchartInterpreter {
     }
 
     /**
-     * Executes a RETURN statement.
+     * Executes a FUNCTION_CALL block.
+     * The value can be:
+     * - functionName(args) - for void functions
+     * - result = functionName(args) - for functions with return value
      */
-    private void executeReturn(String value) {
-        // Parse return value
-        Object returnValue = null;
+    private void executeFunctionCallBlock(String value) {
+        String cleanValue = value.trim();
 
-        if (value != null && !value.trim().isEmpty()) {
-            // Extract value after "return"
-            String returnExpr = value.trim();
-            if (returnExpr.toLowerCase().startsWith("return")) {
-                returnExpr = returnExpr.substring(6).trim();
-            }
+        // Check if it's an assignment with function call
+        if (cleanValue.contains("=")) {
+            // Format: result = functionName(args)
+            String[] parts = cleanValue.split("=", 2);
+            String varName = parts[0].trim();
+            String funcCallExpr = parts[1].trim();
 
-            if (!returnExpr.isEmpty()) {
-                returnValue = evaluateExpression(returnExpr);
-            }
-        }
+            // Evaluate function call
+            Object result = evaluateExpression(funcCallExpr);
 
-        output.append("▶ RETURN: ").append(returnValue).append("\n");
-
-        // If we're in a function, store return value and return to caller
-        if (!callStack.isEmpty()) {
-            FunctionContext context = callStack.peek();
-            context.setLocalVariable("__return_value__", returnValue);
-
-            // Return to caller
-            currentCell = context.getReturnPoint();
+            // Store result
+            setVariable(varName, result);
+            output.append("▶ ").append(varName).append(" = ").append(result).append("\n");
         } else {
-            // Return in main - just stop execution
-            currentCell = endCell;
+            // Format: functionName(args) - void function or result not used
+            Object result = evaluateExpression(cleanValue);
+            // Result is discarded for void functions
         }
     }
 

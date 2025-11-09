@@ -12,6 +12,7 @@ public class FunctionDefinition {
     private Object startCell;
     private Object endCell;
     private List<String> formalParameters;
+    private String returnType;  // "void", "int", "double", "char*", etc.
 
     public FunctionDefinition(String name) {
         this.name = name;
@@ -20,13 +21,15 @@ public class FunctionDefinition {
         this.functionGraph.setCellsEditable(false);
         this.functionGraph.setConnectableEdges(false);
         this.formalParameters = new ArrayList<>();
+        this.returnType = "void";  // Default to void (procedure)
     }
 
-    public FunctionDefinition(String name, List<String> formalParameters) {
+    public FunctionDefinition(String name, List<String> formalParameters, String returnType) {
         this(name);
         if (formalParameters != null) {
             this.formalParameters = new ArrayList<>(formalParameters);
         }
+        this.returnType = returnType != null ? returnType : "void";
     }
 
     public String getName() {
@@ -67,5 +70,13 @@ public class FunctionDefinition {
 
     public void setFormalParameters(List<String> formalParameters) {
         this.formalParameters = formalParameters != null ? new ArrayList<>(formalParameters) : new ArrayList<>();
+    }
+
+    public String getReturnType() {
+        return returnType;
+    }
+
+    public void setReturnType(String returnType) {
+        this.returnType = returnType != null ? returnType : "void";
     }
 }

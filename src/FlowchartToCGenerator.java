@@ -164,9 +164,10 @@ public class FlowchartToCGenerator {
         } else if (FlowchartPanel.DO_WHILE.equals(style)) {
             generateDoWhileLoop(cell, value);
 
-        } else if (FlowchartPanel.RETURN.equals(style)) {
-            generateReturn(value);
-            // RETURN termina l'esecuzione, non proseguire
+        } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+            generateFunctionCall(value);
+            Object next = getNextCell(cell);
+            generateFromCell(next);
 
         } else {
             // Blocco sconosciuto
@@ -490,9 +491,15 @@ public class FlowchartToCGenerator {
             paramNames = new ArrayList<>();
         }
 
+        // Get return type from FunctionDefinition
+        String returnType = funcDef.getReturnType();
+        if (returnType == null || returnType.isEmpty()) {
+            returnType = "void";
+        }
+
         // Generate function signature
-        StringBuilder signature = new StringBuilder("int ");
-        signature.append(functionName).append("(");
+        StringBuilder signature = new StringBuilder(returnType);
+        signature.append(" ").append(functionName).append("(");
 
         if (paramNames.isEmpty()) {
             signature.append("void");
@@ -602,21 +609,16 @@ public class FlowchartToCGenerator {
     }
 
     /**
-     * Genera codice per un blocco RETURN
+     * Genera codice per un blocco FUNCTION_CALL
      */
-    private void generateReturn(String value) {
-        String returnValue = value.trim();
-
-        // Remove "return" keyword if present
-        if (returnValue.toLowerCase().startsWith("return")) {
-            returnValue = returnValue.substring(6).trim();
+    private void generateFunctionCall(String value) {
+        String cleanValue = value.trim();
+        // The value should be in the form: functionName(args) or result = functionName(args)
+        // We just output it as-is with a semicolon
+        if (!cleanValue.endsWith(";")) {
+            cleanValue += ";";
         }
-
-        if (returnValue.isEmpty()) {
-            appendLine("return 0;");
-        } else {
-            appendLine("return " + returnValue + ";");
-        }
+        appendLine(cleanValue);
     }
 
     // ===== VARIABLE TYPE INFERENCE =====

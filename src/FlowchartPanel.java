@@ -66,7 +66,7 @@ public class FlowchartPanel extends JPanel {
     public static final String START = "START";
     public static final String END = "END";
     public static final String MERGE = "MERGE";  // Merge point for conditionals
-    public static final String RETURN = "RETURN";  // Return statement for functions
+    public static final String FUNCTION_CALL = "FUNCTION_CALL";  // Function call block
 
     @Deprecated
     public static final String PROCESS = ASSIGNMENT;  // Deprecated: use ASSIGNMENT
@@ -264,16 +264,16 @@ public class FlowchartPanel extends JPanel {
         mergeStyle.put(mxConstants.STYLE_FONTSIZE, 1);
         stylesheet.putCellStyle(MERGE, mergeStyle);
 
-        // Return block style (rectangle, orange)
-        Map<String, Object> returnStyle = new HashMap<>();
-        returnStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
-        returnStyle.put(mxConstants.STYLE_FILLCOLOR, "#FFD7A3");
-        returnStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
-        returnStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
-        returnStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
-        returnStyle.put(mxConstants.STYLE_FONTSIZE, 12);
-        returnStyle.put(mxConstants.STYLE_ROUNDED, false);
-        stylesheet.putCellStyle(RETURN, returnStyle);
+        // Function call block style (rectangle, purple/magenta)
+        Map<String, Object> functionCallStyle = new HashMap<>();
+        functionCallStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_RECTANGLE);
+        functionCallStyle.put(mxConstants.STYLE_FILLCOLOR, "#E6B3FF");  // Light purple
+        functionCallStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
+        functionCallStyle.put(mxConstants.STYLE_STROKEWIDTH, 2);
+        functionCallStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        functionCallStyle.put(mxConstants.STYLE_FONTSIZE, 12);
+        functionCallStyle.put(mxConstants.STYLE_ROUNDED, false);
+        stylesheet.putCellStyle(FUNCTION_CALL, functionCallStyle);
 
         // ============== CORREZIONE DEGLI STILI PER GLI ARCHI ==============
         // Versione semplificata che funziona con tutte le versioni di JGraphX
@@ -834,9 +834,9 @@ public class FlowchartPanel extends JPanel {
 
         menu.addSeparator();
 
-        JMenuItem returnItem = new JMenuItem("Insert Return Block");
-        returnItem.addActionListener(e -> insertBlockOnEdge(edge, RETURN));
-        menu.add(returnItem);
+        JMenuItem functionCallItem = new JMenuItem("Insert Function Call Block");
+        functionCallItem.addActionListener(e -> insertBlockOnEdge(edge, FUNCTION_CALL));
+        menu.add(functionCallItem);
 
         menu.addSeparator();
 
@@ -884,8 +884,8 @@ public class FlowchartPanel extends JPanel {
                 return "Start";
             case END:
                 return "End";
-            case RETURN:
-                return "return x";
+            case FUNCTION_CALL:
+                return "myFunction(x, y)";
             default:
                 return "Block";
         }
