@@ -322,7 +322,8 @@ public class FlowchartEditorApp extends JFrame {
                     interpreter = new FlowchartInterpreter(
                         currentFlowchartPanel.getGraph(),
                         currentFlowchartPanel.getStartCell(),
-                        currentFlowchartPanel.getEndCell()
+                        currentFlowchartPanel.getEndCell(),
+                        mainFlowchartPanel  // CRITICAL: Pass main panel for function support
                     );
                     setupInterpreter();
 
@@ -348,7 +349,8 @@ public class FlowchartEditorApp extends JFrame {
                     interpreter = new FlowchartInterpreter(
                         currentFlowchartPanel.getGraph(),
                         currentFlowchartPanel.getStartCell(),
-                        currentFlowchartPanel.getEndCell()
+                        currentFlowchartPanel.getEndCell(),
+                        mainFlowchartPanel  // CRITICAL: Pass main panel for function support
                     );
                     setupInterpreter();
 
@@ -808,7 +810,8 @@ public class FlowchartEditorApp extends JFrame {
                     interpreter = new FlowchartInterpreter(
                         currentFlowchartPanel.getGraph(),
                         currentFlowchartPanel.getStartCell(),
-                        currentFlowchartPanel.getEndCell()
+                        currentFlowchartPanel.getEndCell(),
+                        mainFlowchartPanel  // CRITICAL: Pass main panel for function support
                     );
                     setupInterpreter();
 
