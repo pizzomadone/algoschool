@@ -97,7 +97,7 @@ public class FlowchartPanel extends JPanel {
         };
 
         graph.setAllowDanglingEdges(false);
-        graph.setCellsEditable(true);
+        graph.setCellsEditable(false);  // Disable direct editing - use dialog instead
         graph.setConnectableEdges(false);
         graph.setCellsDisconnectable(false);
         graph.setCellsMovable(false);  // FIXED: Blocks are now non-movable
@@ -422,8 +422,8 @@ public class FlowchartPanel extends JPanel {
                             // Show vertex menu
                             showVertexMenu(cell, e.getX(), e.getY());
                         } else if (e.getClickCount() == 2) {
-                            // Double-click to edit label
-                            startEditingCell(cell);
+                            // Double-click to edit label via dialog
+                            editCellWithDialog(cell);
                         }
                     }
                 }
@@ -431,10 +431,66 @@ public class FlowchartPanel extends JPanel {
         });
     }
 
-    // Helper method to start editing a cell - uses available JGraphX method
-    private void startEditingCell(Object cell) {
-        if (graph.isCellEditable(cell)) {
-            graphComponent.startEditingAtCell(cell);
+    /**
+     * Opens a dialog to edit the cell content
+     */
+    private void editCellWithDialog(Object cell) {
+        if (cell == null) return;
+
+        mxCell mxCell = (mxCell) cell;
+        String style = mxCell.getStyle();
+
+        // Don't allow editing Start, End, or Merge points
+        if (START.equals(style) || END.equals(style) || MERGE.equals(style)) {
+            return;
+        }
+
+        // Get current value
+        String currentValue = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
+
+        // Determine dialog title based on block type
+        String dialogTitle = "Edit Block Content";
+        String dialogMessage = "Enter new content:";
+
+        if (ASSIGNMENT.equals(style)) {
+            dialogTitle = "Edit Assignment Block";
+            dialogMessage = "Enter assignment (e.g., x = 5):";
+        } else if (INPUT.equals(style)) {
+            dialogTitle = "Edit Input Block";
+            dialogMessage = "Enter variable name:";
+        } else if (OUTPUT.equals(style)) {
+            dialogTitle = "Edit Output Block";
+            dialogMessage = "Enter output expression or string:";
+        } else if (CONDITIONAL.equals(style)) {
+            dialogTitle = "Edit Conditional Block";
+            dialogMessage = "Enter condition (e.g., x > 0):";
+        } else if (LOOP.equals(style) || FOR_LOOP.equals(style) || DO_WHILE.equals(style)) {
+            dialogTitle = "Edit Loop Block";
+            dialogMessage = "Enter loop condition or specification:";
+        } else if (FUNCTION_CALL.equals(style)) {
+            dialogTitle = "Edit Function Call";
+            dialogMessage = "Enter function call (e.g., result = func(x)):";
+        }
+
+        // Show input dialog
+        String newValue = (String) JOptionPane.showInputDialog(
+            graphComponent,
+            dialogMessage,
+            dialogTitle,
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            currentValue
+        );
+
+        // If user didn't cancel, update the cell value
+        if (newValue != null && !newValue.equals(currentValue)) {
+            graph.getModel().beginUpdate();
+            try {
+                graph.getModel().setValue(cell, newValue);
+            } finally {
+                graph.getModel().endUpdate();
+            }
         }
     }
 
@@ -450,7 +506,7 @@ public class FlowchartPanel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
 
         JMenuItem editItem = new JMenuItem("Edit Label (F2)");
-        editItem.addActionListener(e -> startEditingCell(cell));
+        editItem.addActionListener(e -> editCellWithDialog(cell));
         menu.add(editItem);
 
         menu.addSeparator();
@@ -547,11 +603,7 @@ public class FlowchartPanel extends JPanel {
     public void editSelectedLabel() {
         Object cell = graph.getSelectionCell();
         if (cell != null && graph.getModel().isVertex(cell)) {
-            mxCell vertex = (mxCell) cell;
-            String style = vertex.getStyle();
-            if (!MERGE.equals(style)) {
-                startEditingCell(cell);
-            }
+            editCellWithDialog(cell);
         }
     }
 
