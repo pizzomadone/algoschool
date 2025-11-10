@@ -52,16 +52,25 @@ public class FlowchartToCGenerator {
             return "// Flowchart incompleto: manca Start o End\n";
         }
 
-        // Header del programma
+        // Collect variable types from the flowchart first (needed to detect used functions)
+        variableTypes.clear();
+        Set<String> usedFunctions = new HashSet<>();
+        collectVariablesAndFunctions(startCell, new HashSet<>(), usedFunctions);
+
+        // Header del programma - include solo gli header necessari
         appendLine("#include <stdio.h>");
         appendLine("#include <stdlib.h>");
-        appendLine("#include <string.h>");
-        appendLine("#include <math.h>");
-        appendLine("#include <time.h>");
-        appendLine("");
 
-        // Aggiungi funzioni helper predefinite
-        appendBuiltinFunctions();
+        // Include header opzionali solo se necessario
+        if (needsStringHeader(usedFunctions)) {
+            appendLine("#include <string.h>");
+        }
+        if (needsMathHeader(usedFunctions)) {
+            appendLine("#include <math.h>");
+        }
+        if (needsTimeHeader(usedFunctions)) {
+            appendLine("#include <time.h>");
+        }
         appendLine("");
 
         // Genera le funzioni definite (se presenti)
@@ -78,10 +87,6 @@ public class FlowchartToCGenerator {
         // Main function
         appendLine("int main() {");
         indentLevel++;
-
-        // Collect variable types from the flowchart
-        variableTypes.clear();
-        collectVariables(startCell, new HashSet<>());
 
         // Declare all variables at the beginning
         for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
@@ -659,6 +664,83 @@ public class FlowchartToCGenerator {
     // ===== VARIABLE TYPE INFERENCE =====
 
     /**
+     * Collects all variables, their types, and used functions from the flowchart
+     */
+    private void collectVariablesAndFunctions(Object cell, Set<Object> visited, Set<String> usedFunctions) {
+        if (cell == null || cell == endCell || visited.contains(cell)) {
+            return;
+        }
+
+        visited.add(cell);
+
+        mxCell mxCell = (mxCell) cell;
+        String style = mxCell.getStyle();
+        String value = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
+
+        // Process assignments to infer types and collect function calls
+        if (FlowchartPanel.ASSIGNMENT.equals(style)) {
+            processAssignmentForTypes(value);
+            collectFunctionsFromExpression(value, usedFunctions);
+        } else if (FlowchartPanel.INPUT.equals(style)) {
+            // INPUT blocks create int variables by default
+            String varName = value.trim().replaceFirst("^I:\\s*", "");
+            if (!variableTypes.containsKey(varName)) {
+                variableTypes.put(varName, "int");
+            }
+        } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+            collectFunctionsFromExpression(value, usedFunctions);
+            // FUNCTION_CALL blocks may assign return value to a variable
+            // Format: result = functionName(args) or just functionName(args)
+            if (value.contains("=")) {
+                int equalsIndex = value.indexOf('=');
+                String varName = value.substring(0, equalsIndex).trim();
+                if (!varName.isEmpty() && !variableTypes.containsKey(varName)) {
+                    // Get function name to determine return type
+                    String funcCallExpr = value.substring(equalsIndex + 1).trim();
+                    int parenIndex = funcCallExpr.indexOf('(');
+                    if (parenIndex > 0) {
+                        String functionName = funcCallExpr.substring(0, parenIndex).trim();
+
+                        // Check if it's a built-in function first
+                        String builtinType = getBuiltinFunctionReturnType(functionName);
+                        if (builtinType != null) {
+                            variableTypes.put(varName, builtinType);
+                        } else {
+                            // Get return type from user-defined function
+                            if (flowchartPanel != null) {
+                                FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+                                if (funcDef != null) {
+                                    String returnType = funcDef.getReturnType();
+                                    if (returnType != null && !"void".equals(returnType)) {
+                                        String cType = convertToCType(returnType);
+                                        variableTypes.put(varName, cType);
+                                    }
+                                }
+                            }
+                            // Default to int if function not found
+                            if (!variableTypes.containsKey(varName)) {
+                                variableTypes.put(varName, "int");
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (FlowchartPanel.CONDITIONAL.equals(style) || FlowchartPanel.LOOP.equals(style) ||
+                   FlowchartPanel.FOR_LOOP.equals(style) || FlowchartPanel.DO_WHILE.equals(style)) {
+            // Collect functions used in conditions
+            collectFunctionsFromExpression(value, usedFunctions);
+        }
+
+        // Continue recursively through the graph
+        Object[] edges = graph.getOutgoingEdges(cell);
+        for (Object edge : edges) {
+            mxCell edgeCell = (mxCell) edge;
+            Object target = edgeCell.getTarget();
+            collectVariablesAndFunctions(target, visited, usedFunctions);
+        }
+    }
+
+    /**
      * Collects all variables and their types from the flowchart
      */
     private void collectVariables(Object cell, Set<Object> visited) {
@@ -828,11 +910,8 @@ public class FlowchartToCGenerator {
             case "atan":
             case "floor":
             case "ceil":
-            case "randGauss":
-                return "double";
-
             case "abs":
-                // abs può ritornare int o double, ma in C usiamo generalmente double per abs
+            case "fabs":
                 return "double";
 
             // Funzioni per stringhe
@@ -852,14 +931,9 @@ public class FlowchartToCGenerator {
             case "rand":
                 return "int";
 
-            // Funzioni per tempo/orario
-            case "getHour":
-            case "getMinute":
-            case "getSecond":
-            case "getDay":
-            case "getMonth":
-            case "getYear":
-                return "int";
+            // Funzione tempo
+            case "time":
+                return "int";  // time_t is typically int or long
 
             default:
                 return null; // Not a built-in function
@@ -867,72 +941,57 @@ public class FlowchartToCGenerator {
     }
 
     /**
-     * Aggiunge funzioni helper predefinite per numeri casuali e tempo
+     * Collects function names used in an expression
      */
-    private void appendBuiltinFunctions() {
-        // Funzione per generare numeri casuali con distribuzione normale (Box-Muller)
-        appendLine("// Funzione per generare numeri casuali con distribuzione normale");
-        appendLine("double randGauss(double mean, double stddev) {");
-        appendLine("    static int hasSpare = 0;");
-        appendLine("    static double spare;");
-        appendLine("    if (hasSpare) {");
-        appendLine("        hasSpare = 0;");
-        appendLine("        return mean + stddev * spare;");
-        appendLine("    }");
-        appendLine("    hasSpare = 1;");
-        appendLine("    double u, v, s;");
-        appendLine("    do {");
-        appendLine("        u = (rand() / ((double)RAND_MAX)) * 2.0 - 1.0;");
-        appendLine("        v = (rand() / ((double)RAND_MAX)) * 2.0 - 1.0;");
-        appendLine("        s = u * u + v * v;");
-        appendLine("    } while (s >= 1.0 || s == 0.0);");
-        appendLine("    s = sqrt(-2.0 * log(s) / s);");
-        appendLine("    spare = v * s;");
-        appendLine("    return mean + stddev * u * s;");
-        appendLine("}");
-        appendLine("");
+    private void collectFunctionsFromExpression(String expression, Set<String> usedFunctions) {
+        // Match function calls: functionName(...)
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+        java.util.regex.Matcher matcher = pattern.matcher(expression);
+        while (matcher.find()) {
+            String funcName = matcher.group(1);
+            // Only track built-in functions
+            if (getBuiltinFunctionReturnType(funcName) != null) {
+                usedFunctions.add(funcName);
+            }
+        }
+    }
 
-        // Funzioni helper per il tempo
-        appendLine("// Funzioni helper per ottenere tempo corrente");
-        appendLine("int getHour() {");
-        appendLine("    time_t now = time(NULL);");
-        appendLine("    struct tm *t = localtime(&now);");
-        appendLine("    return t->tm_hour;");
-        appendLine("}");
-        appendLine("");
+    /**
+     * Determines if string.h header is needed
+     */
+    private boolean needsStringHeader(Set<String> usedFunctions) {
+        Set<String> stringFunctions = new HashSet<>(Arrays.asList(
+            "strlen", "strncpy", "strcat", "strncat", "strcmp", "strncmp", "strchr", "strstr"
+        ));
+        for (String func : usedFunctions) {
+            if (stringFunctions.contains(func)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        appendLine("int getMinute() {");
-        appendLine("    time_t now = time(NULL);");
-        appendLine("    struct tm *t = localtime(&now);");
-        appendLine("    return t->tm_min;");
-        appendLine("}");
-        appendLine("");
+    /**
+     * Determines if math.h header is needed
+     */
+    private boolean needsMathHeader(Set<String> usedFunctions) {
+        Set<String> mathFunctions = new HashSet<>(Arrays.asList(
+            "sqrt", "pow", "exp", "log", "log10",
+            "sin", "cos", "tan", "asin", "acos", "atan",
+            "floor", "ceil", "abs", "fabs"
+        ));
+        for (String func : usedFunctions) {
+            if (mathFunctions.contains(func)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        appendLine("int getSecond() {");
-        appendLine("    time_t now = time(NULL);");
-        appendLine("    struct tm *t = localtime(&now);");
-        appendLine("    return t->tm_sec;");
-        appendLine("}");
-        appendLine("");
-
-        appendLine("int getDay() {");
-        appendLine("    time_t now = time(NULL);");
-        appendLine("    struct tm *t = localtime(&now);");
-        appendLine("    return t->tm_mday;");
-        appendLine("}");
-        appendLine("");
-
-        appendLine("int getMonth() {");
-        appendLine("    time_t now = time(NULL);");
-        appendLine("    struct tm *t = localtime(&now);");
-        appendLine("    return t->tm_mon + 1;  // tm_mon is 0-11");
-        appendLine("}");
-        appendLine("");
-
-        appendLine("int getYear() {");
-        appendLine("    time_t now = time(NULL);");
-        appendLine("    struct tm *t = localtime(&now);");
-        appendLine("    return t->tm_year + 1900;  // tm_year is years since 1900");
-        appendLine("}");
+    /**
+     * Determines if time.h header is needed
+     */
+    private boolean needsTimeHeader(Set<String> usedFunctions) {
+        return usedFunctions.contains("time");
     }
 }

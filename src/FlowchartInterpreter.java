@@ -1107,37 +1107,11 @@ public class FlowchartInterpreter {
                     throw new RuntimeException("rand expects 0, 1, or 2 arguments");
                 }
 
-            case "randGauss":
-                // randGauss(mean, stddev)
-                if (argValues.size() != 2) throw new RuntimeException("randGauss expects 2 arguments");
-                double mean = toDouble(argValues.get(0));
-                double stddev = toDouble(argValues.get(1));
-                return new java.util.Random().nextGaussian() * stddev + mean;
-
-            // === Funzioni per Tempo/Orario ===
-            case "getHour":
-                if (argValues.size() != 0) throw new RuntimeException("getHour expects 0 arguments");
-                return java.time.LocalTime.now().getHour();
-
-            case "getMinute":
-                if (argValues.size() != 0) throw new RuntimeException("getMinute expects 0 arguments");
-                return java.time.LocalTime.now().getMinute();
-
-            case "getSecond":
-                if (argValues.size() != 0) throw new RuntimeException("getSecond expects 0 arguments");
-                return java.time.LocalTime.now().getSecond();
-
-            case "getDay":
-                if (argValues.size() != 0) throw new RuntimeException("getDay expects 0 arguments");
-                return java.time.LocalDate.now().getDayOfMonth();
-
-            case "getMonth":
-                if (argValues.size() != 0) throw new RuntimeException("getMonth expects 0 arguments");
-                return java.time.LocalDate.now().getMonthValue();
-
-            case "getYear":
-                if (argValues.size() != 0) throw new RuntimeException("getYear expects 0 arguments");
-                return java.time.LocalDate.now().getYear();
+            // === Funzione Tempo ===
+            case "time":
+                // time() ritorna i secondi dall'epoca Unix (1 gennaio 1970)
+                if (argValues.size() != 0) throw new RuntimeException("time expects 0 arguments");
+                return (int)(System.currentTimeMillis() / 1000);
 
             default:
                 // Not a built-in function
