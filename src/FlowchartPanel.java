@@ -858,8 +858,17 @@ public class FlowchartPanel extends JPanel {
 
             } else {
                 // Regular blocks (Assignment, Input, Output)
-                String blockText = JOptionPane.showInputDialog(this,
-                    "Enter block text:", getDefaultTextForBlockType(blockType));
+                String blockText;
+                if (ASSIGNMENT.equals(blockType)) {
+                    // Use multiline dialog for assignment blocks
+                    blockText = showMultilineInputDialog(this,
+                        "Enter assignments (one per line, e.g., x = 5):",
+                        "New Assignment Block",
+                        getDefaultTextForBlockType(blockType));
+                } else {
+                    blockText = JOptionPane.showInputDialog(this,
+                        "Enter block text:", getDefaultTextForBlockType(blockType));
+                }
 
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (blockText == null) {
