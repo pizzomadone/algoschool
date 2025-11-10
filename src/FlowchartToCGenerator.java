@@ -55,6 +55,13 @@ public class FlowchartToCGenerator {
         // Header del programma
         appendLine("#include <stdio.h>");
         appendLine("#include <stdlib.h>");
+        appendLine("#include <string.h>");
+        appendLine("#include <math.h>");
+        appendLine("#include <time.h>");
+        appendLine("");
+
+        // Aggiungi funzioni helper predefinite
+        appendBuiltinFunctions();
         appendLine("");
 
         // Genera le funzioni definite (se presenti)
@@ -686,20 +693,27 @@ public class FlowchartToCGenerator {
                     int parenIndex = funcCallExpr.indexOf('(');
                     if (parenIndex > 0) {
                         String functionName = funcCallExpr.substring(0, parenIndex).trim();
-                        // Get return type from function definition
-                        if (flowchartPanel != null) {
-                            FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
-                            if (funcDef != null) {
-                                String returnType = funcDef.getReturnType();
-                                if (returnType != null && !"void".equals(returnType)) {
-                                    String cType = convertToCType(returnType);
-                                    variableTypes.put(varName, cType);
+
+                        // Check if it's a built-in function first
+                        String builtinType = getBuiltinFunctionReturnType(functionName);
+                        if (builtinType != null) {
+                            variableTypes.put(varName, builtinType);
+                        } else {
+                            // Get return type from user-defined function
+                            if (flowchartPanel != null) {
+                                FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+                                if (funcDef != null) {
+                                    String returnType = funcDef.getReturnType();
+                                    if (returnType != null && !"void".equals(returnType)) {
+                                        String cType = convertToCType(returnType);
+                                        variableTypes.put(varName, cType);
+                                    }
                                 }
                             }
-                        }
-                        // Default to int if function not found
-                        if (!variableTypes.containsKey(varName)) {
-                            variableTypes.put(varName, "int");
+                            // Default to int if function not found
+                            if (!variableTypes.containsKey(varName)) {
+                                variableTypes.put(varName, "int");
+                            }
                         }
                     }
                 }
@@ -793,5 +807,132 @@ public class FlowchartToCGenerator {
             default:
                 return "int";
         }
+    }
+
+    /**
+     * Returns the C return type for built-in functions, or null if not a built-in function.
+     */
+    private String getBuiltinFunctionReturnType(String functionName) {
+        switch (functionName) {
+            // Funzioni matematiche - tutte ritornano double
+            case "sqrt":
+            case "pow":
+            case "exp":
+            case "log":
+            case "log10":
+            case "sin":
+            case "cos":
+            case "tan":
+            case "asin":
+            case "acos":
+            case "atan":
+            case "floor":
+            case "ceil":
+            case "randGauss":
+                return "double";
+
+            case "abs":
+                // abs può ritornare int o double, ma in C usiamo generalmente double per abs
+                return "double";
+
+            // Funzioni per stringhe
+            case "strlen":
+            case "strcmp":
+            case "strncmp":
+            case "strchr":
+            case "strstr":
+                return "int";
+
+            case "strncpy":
+            case "strcat":
+            case "strncat":
+                return "char*";
+
+            // Funzioni per numeri casuali
+            case "rand":
+                return "int";
+
+            // Funzioni per tempo/orario
+            case "getHour":
+            case "getMinute":
+            case "getSecond":
+            case "getDay":
+            case "getMonth":
+            case "getYear":
+                return "int";
+
+            default:
+                return null; // Not a built-in function
+        }
+    }
+
+    /**
+     * Aggiunge funzioni helper predefinite per numeri casuali e tempo
+     */
+    private void appendBuiltinFunctions() {
+        // Funzione per generare numeri casuali con distribuzione normale (Box-Muller)
+        appendLine("// Funzione per generare numeri casuali con distribuzione normale");
+        appendLine("double randGauss(double mean, double stddev) {");
+        appendLine("    static int hasSpare = 0;");
+        appendLine("    static double spare;");
+        appendLine("    if (hasSpare) {");
+        appendLine("        hasSpare = 0;");
+        appendLine("        return mean + stddev * spare;");
+        appendLine("    }");
+        appendLine("    hasSpare = 1;");
+        appendLine("    double u, v, s;");
+        appendLine("    do {");
+        appendLine("        u = (rand() / ((double)RAND_MAX)) * 2.0 - 1.0;");
+        appendLine("        v = (rand() / ((double)RAND_MAX)) * 2.0 - 1.0;");
+        appendLine("        s = u * u + v * v;");
+        appendLine("    } while (s >= 1.0 || s == 0.0);");
+        appendLine("    s = sqrt(-2.0 * log(s) / s);");
+        appendLine("    spare = v * s;");
+        appendLine("    return mean + stddev * u * s;");
+        appendLine("}");
+        appendLine("");
+
+        // Funzioni helper per il tempo
+        appendLine("// Funzioni helper per ottenere tempo corrente");
+        appendLine("int getHour() {");
+        appendLine("    time_t now = time(NULL);");
+        appendLine("    struct tm *t = localtime(&now);");
+        appendLine("    return t->tm_hour;");
+        appendLine("}");
+        appendLine("");
+
+        appendLine("int getMinute() {");
+        appendLine("    time_t now = time(NULL);");
+        appendLine("    struct tm *t = localtime(&now);");
+        appendLine("    return t->tm_min;");
+        appendLine("}");
+        appendLine("");
+
+        appendLine("int getSecond() {");
+        appendLine("    time_t now = time(NULL);");
+        appendLine("    struct tm *t = localtime(&now);");
+        appendLine("    return t->tm_sec;");
+        appendLine("}");
+        appendLine("");
+
+        appendLine("int getDay() {");
+        appendLine("    time_t now = time(NULL);");
+        appendLine("    struct tm *t = localtime(&now);");
+        appendLine("    return t->tm_mday;");
+        appendLine("}");
+        appendLine("");
+
+        appendLine("int getMonth() {");
+        appendLine("    time_t now = time(NULL);");
+        appendLine("    struct tm *t = localtime(&now);");
+        appendLine("    return t->tm_mon + 1;  // tm_mon is 0-11");
+        appendLine("}");
+        appendLine("");
+
+        appendLine("int getYear() {");
+        appendLine("    time_t now = time(NULL);");
+        appendLine("    struct tm *t = localtime(&now);");
+        appendLine("    return t->tm_year + 1900;  // tm_year is years since 1900");
+        appendLine("}");
     }
 }
