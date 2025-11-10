@@ -182,14 +182,21 @@ public class FlowchartToCGenerator {
     }
 
     /**
-     * Genera codice per un assignment
+     * Genera codice per un assignment (supporta multiple istruzioni separate da newline)
      */
     private void generateAssignment(String value) {
-        String cleanValue = value.trim();
-        if (!cleanValue.endsWith(";")) {
-            cleanValue += ";";
+        // Supporto per multiple istruzioni separate da newline
+        String[] statements = value.split("\n");
+        for (String statement : statements) {
+            String cleanValue = statement.trim();
+            if (cleanValue.isEmpty()) {
+                continue; // Salta righe vuote
+            }
+            if (!cleanValue.endsWith(";")) {
+                cleanValue += ";";
+            }
+            appendLine(cleanValue);
         }
-        appendLine(cleanValue);
     }
 
     /**
@@ -709,25 +716,34 @@ public class FlowchartToCGenerator {
     }
 
     /**
-     * Process an assignment to infer variable type
+     * Process an assignment to infer variable type (supporta multiple istruzioni)
      */
     private void processAssignmentForTypes(String assignment) {
-        // Parse: varName = expression
-        int equalsIndex = assignment.indexOf('=');
-        if (equalsIndex == -1) return;
+        // Supporto per multiple istruzioni separate da newline
+        String[] statements = assignment.split("\n");
+        for (String statement : statements) {
+            statement = statement.trim();
+            if (statement.isEmpty()) {
+                continue; // Salta righe vuote
+            }
 
-        String varName = assignment.substring(0, equalsIndex).trim();
-        String expression = assignment.substring(equalsIndex + 1).trim();
+            // Parse: varName = expression
+            int equalsIndex = statement.indexOf('=');
+            if (equalsIndex == -1) continue;
 
-        // Skip if it's a function call (will be handled separately)
-        if (varName.isEmpty()) return;
+            String varName = statement.substring(0, equalsIndex).trim();
+            String expression = statement.substring(equalsIndex + 1).trim();
 
-        // Infer type from expression
-        String type = inferType(expression);
+            // Skip if it's a function call (will be handled separately)
+            if (varName.isEmpty()) continue;
 
-        // Only set type if not already set (first assignment wins)
-        if (!variableTypes.containsKey(varName)) {
-            variableTypes.put(varName, type);
+            // Infer type from expression
+            String type = inferType(expression);
+
+            // Only set type if not already set (first assignment wins)
+            if (!variableTypes.containsKey(varName)) {
+                variableTypes.put(varName, type);
+            }
         }
     }
 

@@ -285,18 +285,27 @@ public class FlowchartInterpreter {
     }
 
     private void executeAssignment(String instruction) {
-        Matcher matcher = ASSIGNMENT_PATTERN.matcher(instruction);
-        if (matcher.matches()) {
-            String varName = matcher.group(1).trim();
-            String expression = matcher.group(2).trim();
+        // Supporto per multiple istruzioni separate da newline
+        String[] statements = instruction.split("\n");
+        for (String statement : statements) {
+            statement = statement.trim();
+            if (statement.isEmpty()) {
+                continue; // Salta righe vuote
+            }
 
-            output.append("▶ ASSIGNMENT: Evaluating '").append(expression).append("'\n");
-            Object result = evaluateExpression(expression);
-            setVariable(varName, result);
-            output.append("  → Variable '").append(varName).append("' = ").append(result).append("\n");
-        } else {
-            // Se non è un assegnamento, prova a valutare come espressione
-            evaluateExpression(instruction);
+            Matcher matcher = ASSIGNMENT_PATTERN.matcher(statement);
+            if (matcher.matches()) {
+                String varName = matcher.group(1).trim();
+                String expression = matcher.group(2).trim();
+
+                output.append("▶ ASSIGNMENT: Evaluating '").append(expression).append("'\n");
+                Object result = evaluateExpression(expression);
+                setVariable(varName, result);
+                output.append("  → Variable '").append(varName).append("' = ").append(result).append("\n");
+            } else {
+                // Se non è un assegnamento, prova a valutare come espressione
+                evaluateExpression(statement);
+            }
         }
     }
 
