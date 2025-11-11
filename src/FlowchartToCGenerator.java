@@ -52,9 +52,25 @@ public class FlowchartToCGenerator {
             return "// Flowchart incompleto: manca Start o End\n";
         }
 
-        // Header del programma
+        // Collect variable types from the flowchart first (needed to detect used functions)
+        variableTypes.clear();
+        Set<String> usedFunctions = new HashSet<>();
+        collectVariablesAndFunctions(startCell, new HashSet<>(), usedFunctions);
+
+        // Header del programma - include solo gli header necessari
         appendLine("#include <stdio.h>");
         appendLine("#include <stdlib.h>");
+
+        // Include header opzionali solo se necessario
+        if (needsStringHeader(usedFunctions)) {
+            appendLine("#include <string.h>");
+        }
+        if (needsMathHeader(usedFunctions)) {
+            appendLine("#include <math.h>");
+        }
+        if (needsTimeHeader(usedFunctions)) {
+            appendLine("#include <time.h>");
+        }
         appendLine("");
 
         // Genera le funzioni definite (se presenti)
@@ -71,10 +87,6 @@ public class FlowchartToCGenerator {
         // Main function
         appendLine("int main() {");
         indentLevel++;
-
-        // Collect variable types from the flowchart
-        variableTypes.clear();
-        collectVariables(startCell, new HashSet<>());
 
         // Declare all variables at the beginning
         for (Map.Entry<String, String> entry : variableTypes.entrySet()) {
@@ -182,14 +194,21 @@ public class FlowchartToCGenerator {
     }
 
     /**
-     * Genera codice per un assignment
+     * Genera codice per un assignment (supporta multiple istruzioni separate da newline)
      */
     private void generateAssignment(String value) {
-        String cleanValue = value.trim();
-        if (!cleanValue.endsWith(";")) {
-            cleanValue += ";";
+        // Supporto per multiple istruzioni separate da newline
+        String[] statements = value.split("\n");
+        for (String statement : statements) {
+            String cleanValue = statement.trim();
+            if (cleanValue.isEmpty()) {
+                continue; // Salta righe vuote
+            }
+            if (!cleanValue.endsWith(";")) {
+                cleanValue += ";";
+            }
+            appendLine(cleanValue);
         }
-        appendLine(cleanValue);
     }
 
     /**
@@ -645,6 +664,83 @@ public class FlowchartToCGenerator {
     // ===== VARIABLE TYPE INFERENCE =====
 
     /**
+     * Collects all variables, their types, and used functions from the flowchart
+     */
+    private void collectVariablesAndFunctions(Object cell, Set<Object> visited, Set<String> usedFunctions) {
+        if (cell == null || cell == endCell || visited.contains(cell)) {
+            return;
+        }
+
+        visited.add(cell);
+
+        mxCell mxCell = (mxCell) cell;
+        String style = mxCell.getStyle();
+        String value = mxCell.getValue() != null ? mxCell.getValue().toString() : "";
+
+        // Process assignments to infer types and collect function calls
+        if (FlowchartPanel.ASSIGNMENT.equals(style)) {
+            processAssignmentForTypes(value);
+            collectFunctionsFromExpression(value, usedFunctions);
+        } else if (FlowchartPanel.INPUT.equals(style)) {
+            // INPUT blocks create int variables by default
+            String varName = value.trim().replaceFirst("^I:\\s*", "");
+            if (!variableTypes.containsKey(varName)) {
+                variableTypes.put(varName, "int");
+            }
+        } else if (FlowchartPanel.FUNCTION_CALL.equals(style)) {
+            collectFunctionsFromExpression(value, usedFunctions);
+            // FUNCTION_CALL blocks may assign return value to a variable
+            // Format: result = functionName(args) or just functionName(args)
+            if (value.contains("=")) {
+                int equalsIndex = value.indexOf('=');
+                String varName = value.substring(0, equalsIndex).trim();
+                if (!varName.isEmpty() && !variableTypes.containsKey(varName)) {
+                    // Get function name to determine return type
+                    String funcCallExpr = value.substring(equalsIndex + 1).trim();
+                    int parenIndex = funcCallExpr.indexOf('(');
+                    if (parenIndex > 0) {
+                        String functionName = funcCallExpr.substring(0, parenIndex).trim();
+
+                        // Check if it's a built-in function first
+                        String builtinType = getBuiltinFunctionReturnType(functionName);
+                        if (builtinType != null) {
+                            variableTypes.put(varName, builtinType);
+                        } else {
+                            // Get return type from user-defined function
+                            if (flowchartPanel != null) {
+                                FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+                                if (funcDef != null) {
+                                    String returnType = funcDef.getReturnType();
+                                    if (returnType != null && !"void".equals(returnType)) {
+                                        String cType = convertToCType(returnType);
+                                        variableTypes.put(varName, cType);
+                                    }
+                                }
+                            }
+                            // Default to int if function not found
+                            if (!variableTypes.containsKey(varName)) {
+                                variableTypes.put(varName, "int");
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (FlowchartPanel.CONDITIONAL.equals(style) || FlowchartPanel.LOOP.equals(style) ||
+                   FlowchartPanel.FOR_LOOP.equals(style) || FlowchartPanel.DO_WHILE.equals(style)) {
+            // Collect functions used in conditions
+            collectFunctionsFromExpression(value, usedFunctions);
+        }
+
+        // Continue recursively through the graph
+        Object[] edges = graph.getOutgoingEdges(cell);
+        for (Object edge : edges) {
+            mxCell edgeCell = (mxCell) edge;
+            Object target = edgeCell.getTarget();
+            collectVariablesAndFunctions(target, visited, usedFunctions);
+        }
+    }
+
+    /**
      * Collects all variables and their types from the flowchart
      */
     private void collectVariables(Object cell, Set<Object> visited) {
@@ -679,20 +775,27 @@ public class FlowchartToCGenerator {
                     int parenIndex = funcCallExpr.indexOf('(');
                     if (parenIndex > 0) {
                         String functionName = funcCallExpr.substring(0, parenIndex).trim();
-                        // Get return type from function definition
-                        if (flowchartPanel != null) {
-                            FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
-                            if (funcDef != null) {
-                                String returnType = funcDef.getReturnType();
-                                if (returnType != null && !"void".equals(returnType)) {
-                                    String cType = convertToCType(returnType);
-                                    variableTypes.put(varName, cType);
+
+                        // Check if it's a built-in function first
+                        String builtinType = getBuiltinFunctionReturnType(functionName);
+                        if (builtinType != null) {
+                            variableTypes.put(varName, builtinType);
+                        } else {
+                            // Get return type from user-defined function
+                            if (flowchartPanel != null) {
+                                FunctionDefinition funcDef = flowchartPanel.getFunction(functionName);
+                                if (funcDef != null) {
+                                    String returnType = funcDef.getReturnType();
+                                    if (returnType != null && !"void".equals(returnType)) {
+                                        String cType = convertToCType(returnType);
+                                        variableTypes.put(varName, cType);
+                                    }
                                 }
                             }
-                        }
-                        // Default to int if function not found
-                        if (!variableTypes.containsKey(varName)) {
-                            variableTypes.put(varName, "int");
+                            // Default to int if function not found
+                            if (!variableTypes.containsKey(varName)) {
+                                variableTypes.put(varName, "int");
+                            }
                         }
                     }
                 }
@@ -709,25 +812,34 @@ public class FlowchartToCGenerator {
     }
 
     /**
-     * Process an assignment to infer variable type
+     * Process an assignment to infer variable type (supporta multiple istruzioni)
      */
     private void processAssignmentForTypes(String assignment) {
-        // Parse: varName = expression
-        int equalsIndex = assignment.indexOf('=');
-        if (equalsIndex == -1) return;
+        // Supporto per multiple istruzioni separate da newline
+        String[] statements = assignment.split("\n");
+        for (String statement : statements) {
+            statement = statement.trim();
+            if (statement.isEmpty()) {
+                continue; // Salta righe vuote
+            }
 
-        String varName = assignment.substring(0, equalsIndex).trim();
-        String expression = assignment.substring(equalsIndex + 1).trim();
+            // Parse: varName = expression
+            int equalsIndex = statement.indexOf('=');
+            if (equalsIndex == -1) continue;
 
-        // Skip if it's a function call (will be handled separately)
-        if (varName.isEmpty()) return;
+            String varName = statement.substring(0, equalsIndex).trim();
+            String expression = statement.substring(equalsIndex + 1).trim();
 
-        // Infer type from expression
-        String type = inferType(expression);
+            // Skip if it's a function call (will be handled separately)
+            if (varName.isEmpty()) continue;
 
-        // Only set type if not already set (first assignment wins)
-        if (!variableTypes.containsKey(varName)) {
-            variableTypes.put(varName, type);
+            // Infer type from expression
+            String type = inferType(expression);
+
+            // Only set type if not already set (first assignment wins)
+            if (!variableTypes.containsKey(varName)) {
+                variableTypes.put(varName, type);
+            }
         }
     }
 
@@ -777,5 +889,109 @@ public class FlowchartToCGenerator {
             default:
                 return "int";
         }
+    }
+
+    /**
+     * Returns the C return type for built-in functions, or null if not a built-in function.
+     */
+    private String getBuiltinFunctionReturnType(String functionName) {
+        switch (functionName) {
+            // Funzioni matematiche - tutte ritornano double
+            case "sqrt":
+            case "pow":
+            case "exp":
+            case "log":
+            case "log10":
+            case "sin":
+            case "cos":
+            case "tan":
+            case "asin":
+            case "acos":
+            case "atan":
+            case "floor":
+            case "ceil":
+            case "abs":
+            case "fabs":
+                return "double";
+
+            // Funzioni per stringhe
+            case "strlen":
+            case "strcmp":
+            case "strncmp":
+            case "strchr":
+            case "strstr":
+                return "int";
+
+            case "strncpy":
+            case "strcat":
+            case "strncat":
+                return "char*";
+
+            // Funzioni per numeri casuali
+            case "rand":
+                return "int";
+
+            // Funzione tempo
+            case "time":
+                return "int";  // time_t is typically int or long
+
+            default:
+                return null; // Not a built-in function
+        }
+    }
+
+    /**
+     * Collects function names used in an expression
+     */
+    private void collectFunctionsFromExpression(String expression, Set<String> usedFunctions) {
+        // Match function calls: functionName(...)
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+        java.util.regex.Matcher matcher = pattern.matcher(expression);
+        while (matcher.find()) {
+            String funcName = matcher.group(1);
+            // Only track built-in functions
+            if (getBuiltinFunctionReturnType(funcName) != null) {
+                usedFunctions.add(funcName);
+            }
+        }
+    }
+
+    /**
+     * Determines if string.h header is needed
+     */
+    private boolean needsStringHeader(Set<String> usedFunctions) {
+        Set<String> stringFunctions = new HashSet<>(Arrays.asList(
+            "strlen", "strncpy", "strcat", "strncat", "strcmp", "strncmp", "strchr", "strstr"
+        ));
+        for (String func : usedFunctions) {
+            if (stringFunctions.contains(func)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Determines if math.h header is needed
+     */
+    private boolean needsMathHeader(Set<String> usedFunctions) {
+        Set<String> mathFunctions = new HashSet<>(Arrays.asList(
+            "sqrt", "pow", "exp", "log", "log10",
+            "sin", "cos", "tan", "asin", "acos", "atan",
+            "floor", "ceil", "abs", "fabs"
+        ));
+        for (String func : usedFunctions) {
+            if (mathFunctions.contains(func)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Determines if time.h header is needed
+     */
+    private boolean needsTimeHeader(Set<String> usedFunctions) {
+        return usedFunctions.contains("time");
     }
 }

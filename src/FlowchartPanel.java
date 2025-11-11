@@ -481,7 +481,7 @@ public class FlowchartPanel extends JPanel {
 
         if (ASSIGNMENT.equals(style)) {
             dialogTitle = "Edit Assignment Block";
-            dialogMessage = "Enter assignment (e.g., x = 5):";
+            dialogMessage = "Enter assignments (one per line, e.g., x = 5):";
         } else if (INPUT.equals(style)) {
             dialogTitle = "Edit Input Block";
             dialogMessage = "Enter variable name:";
@@ -499,16 +499,21 @@ public class FlowchartPanel extends JPanel {
             dialogMessage = "Enter function call (e.g., result = func(x)):";
         }
 
-        // Show input dialog
-        String newValue = (String) JOptionPane.showInputDialog(
-            graphComponent,
-            dialogMessage,
-            dialogTitle,
-            JOptionPane.PLAIN_MESSAGE,
-            null,
-            null,
-            currentValue
-        );
+        // Show input dialog (use JTextArea for ASSIGNMENT blocks to support multiple lines)
+        String newValue;
+        if (ASSIGNMENT.equals(style)) {
+            newValue = showMultilineInputDialog(graphComponent, dialogMessage, dialogTitle, currentValue);
+        } else {
+            newValue = (String) JOptionPane.showInputDialog(
+                graphComponent,
+                dialogMessage,
+                dialogTitle,
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                currentValue
+            );
+        }
 
         // If user didn't cancel, update the cell value
         if (newValue != null && !newValue.equals(currentValue)) {
@@ -519,6 +524,38 @@ public class FlowchartPanel extends JPanel {
                 graph.getModel().endUpdate();
             }
         }
+    }
+
+    /**
+     * Mostra un dialog con JTextArea per input multilinea
+     */
+    private String showMultilineInputDialog(Component parent, String message, String title, String initialValue) {
+        JTextArea textArea = new JTextArea(10, 40);
+        textArea.setText(initialValue);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        textArea.setLineWrap(false);
+        textArea.setWrapStyleWord(false);
+
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.add(new JLabel(message), BorderLayout.NORTH);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
+        int result = JOptionPane.showConfirmDialog(
+            parent,
+            panel,
+            title,
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (result == JOptionPane.OK_OPTION) {
+            return textArea.getText();
+        }
+        return null;
     }
 
     private void showVertexMenu(Object cell, int x, int y) {
@@ -821,8 +858,17 @@ public class FlowchartPanel extends JPanel {
 
             } else {
                 // Regular blocks (Assignment, Input, Output)
-                String blockText = JOptionPane.showInputDialog(this,
-                    "Enter block text:", getDefaultTextForBlockType(blockType));
+                String blockText;
+                if (ASSIGNMENT.equals(blockType)) {
+                    // Use multiline dialog for assignment blocks
+                    blockText = showMultilineInputDialog(this,
+                        "Enter assignments (one per line, e.g., x = 5):",
+                        "New Assignment Block",
+                        getDefaultTextForBlockType(blockType));
+                } else {
+                    blockText = JOptionPane.showInputDialog(this,
+                        "Enter block text:", getDefaultTextForBlockType(blockType));
+                }
 
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (blockText == null) {

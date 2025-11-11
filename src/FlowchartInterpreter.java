@@ -285,18 +285,27 @@ public class FlowchartInterpreter {
     }
 
     private void executeAssignment(String instruction) {
-        Matcher matcher = ASSIGNMENT_PATTERN.matcher(instruction);
-        if (matcher.matches()) {
-            String varName = matcher.group(1).trim();
-            String expression = matcher.group(2).trim();
+        // Supporto per multiple istruzioni separate da newline
+        String[] statements = instruction.split("\n");
+        for (String statement : statements) {
+            statement = statement.trim();
+            if (statement.isEmpty()) {
+                continue; // Salta righe vuote
+            }
 
-            output.append("▶ ASSIGNMENT: Evaluating '").append(expression).append("'\n");
-            Object result = evaluateExpression(expression);
-            setVariable(varName, result);
-            output.append("  → Variable '").append(varName).append("' = ").append(result).append("\n");
-        } else {
-            // Se non è un assegnamento, prova a valutare come espressione
-            evaluateExpression(instruction);
+            Matcher matcher = ASSIGNMENT_PATTERN.matcher(statement);
+            if (matcher.matches()) {
+                String varName = matcher.group(1).trim();
+                String expression = matcher.group(2).trim();
+
+                output.append("▶ ASSIGNMENT: Evaluating '").append(expression).append("'\n");
+                Object result = evaluateExpression(expression);
+                setVariable(varName, result);
+                output.append("  → Variable '").append(varName).append("' = ").append(result).append("\n");
+            } else {
+                // Se non è un assegnamento, prova a valutare come espressione
+                evaluateExpression(statement);
+            }
         }
     }
 
@@ -761,6 +770,12 @@ public class FlowchartInterpreter {
      * Executes a function call.
      */
     private Object executeFunctionCall(String functionName, List<Object> argValues) {
+        // Check if it's a built-in function first
+        Object builtinResult = executeBuiltinFunction(functionName, argValues);
+        if (builtinResult != null) {
+            return builtinResult;
+        }
+
         if (flowchartPanel == null) {
             throw new RuntimeException("FlowchartPanel reference not set, cannot call functions");
         }
@@ -950,5 +965,185 @@ public class FlowchartInterpreter {
         }
 
         return allVars;
+    }
+
+    /**
+     * Executes built-in functions (math, string, random, time).
+     * Returns null if the function is not a built-in function.
+     */
+    private Object executeBuiltinFunction(String functionName, List<Object> argValues) {
+        double arg1, arg2;
+
+        switch (functionName) {
+            // === Funzioni Matematiche ===
+            case "sqrt":
+                if (argValues.size() != 1) throw new RuntimeException("sqrt expects 1 argument");
+                return Math.sqrt(toDouble(argValues.get(0)));
+
+            case "pow":
+                if (argValues.size() != 2) throw new RuntimeException("pow expects 2 arguments");
+                return Math.pow(toDouble(argValues.get(0)), toDouble(argValues.get(1)));
+
+            case "exp":
+                if (argValues.size() != 1) throw new RuntimeException("exp expects 1 argument");
+                return Math.exp(toDouble(argValues.get(0)));
+
+            case "log":
+                if (argValues.size() != 1) throw new RuntimeException("log expects 1 argument");
+                return Math.log(toDouble(argValues.get(0)));
+
+            case "log10":
+                if (argValues.size() != 1) throw new RuntimeException("log10 expects 1 argument");
+                return Math.log10(toDouble(argValues.get(0)));
+
+            case "sin":
+                if (argValues.size() != 1) throw new RuntimeException("sin expects 1 argument");
+                return Math.sin(toDouble(argValues.get(0)));
+
+            case "cos":
+                if (argValues.size() != 1) throw new RuntimeException("cos expects 1 argument");
+                return Math.cos(toDouble(argValues.get(0)));
+
+            case "tan":
+                if (argValues.size() != 1) throw new RuntimeException("tan expects 1 argument");
+                return Math.tan(toDouble(argValues.get(0)));
+
+            case "asin":
+                if (argValues.size() != 1) throw new RuntimeException("asin expects 1 argument");
+                return Math.asin(toDouble(argValues.get(0)));
+
+            case "acos":
+                if (argValues.size() != 1) throw new RuntimeException("acos expects 1 argument");
+                return Math.acos(toDouble(argValues.get(0)));
+
+            case "atan":
+                if (argValues.size() != 1) throw new RuntimeException("atan expects 1 argument");
+                return Math.atan(toDouble(argValues.get(0)));
+
+            case "floor":
+                if (argValues.size() != 1) throw new RuntimeException("floor expects 1 argument");
+                return Math.floor(toDouble(argValues.get(0)));
+
+            case "ceil":
+                if (argValues.size() != 1) throw new RuntimeException("ceil expects 1 argument");
+                return Math.ceil(toDouble(argValues.get(0)));
+
+            case "abs":
+                if (argValues.size() != 1) throw new RuntimeException("abs expects 1 argument");
+                Object val = argValues.get(0);
+                if (val instanceof Integer) {
+                    return Math.abs((Integer) val);
+                } else {
+                    return Math.abs(toDouble(val));
+                }
+
+            // === Funzioni per Stringhe ===
+            case "strlen":
+                if (argValues.size() != 1) throw new RuntimeException("strlen expects 1 argument");
+                return argValues.get(0).toString().length();
+
+            case "strncpy":
+                if (argValues.size() != 2) throw new RuntimeException("strncpy expects 2 arguments");
+                String src = argValues.get(0).toString();
+                int n = toInt(argValues.get(1));
+                return src.substring(0, Math.min(n, src.length()));
+
+            case "strcat":
+                if (argValues.size() != 2) throw new RuntimeException("strcat expects 2 arguments");
+                return argValues.get(0).toString() + argValues.get(1).toString();
+
+            case "strncat":
+                if (argValues.size() != 3) throw new RuntimeException("strncat expects 3 arguments");
+                String str1 = argValues.get(0).toString();
+                String str2 = argValues.get(1).toString();
+                int count = toInt(argValues.get(2));
+                return str1 + str2.substring(0, Math.min(count, str2.length()));
+
+            case "strcmp":
+                if (argValues.size() != 2) throw new RuntimeException("strcmp expects 2 arguments");
+                return argValues.get(0).toString().compareTo(argValues.get(1).toString());
+
+            case "strncmp":
+                if (argValues.size() != 3) throw new RuntimeException("strncmp expects 3 arguments");
+                String s1 = argValues.get(0).toString();
+                String s2 = argValues.get(1).toString();
+                int len = toInt(argValues.get(2));
+                s1 = s1.substring(0, Math.min(len, s1.length()));
+                s2 = s2.substring(0, Math.min(len, s2.length()));
+                return s1.compareTo(s2);
+
+            case "strchr":
+                if (argValues.size() != 2) throw new RuntimeException("strchr expects 2 arguments");
+                String str = argValues.get(0).toString();
+                String ch = argValues.get(1).toString();
+                if (ch.length() > 0) {
+                    int index = str.indexOf(ch.charAt(0));
+                    return index >= 0 ? index : -1;
+                }
+                return -1;
+
+            case "strstr":
+                if (argValues.size() != 2) throw new RuntimeException("strstr expects 2 arguments");
+                String haystack = argValues.get(0).toString();
+                String needle = argValues.get(1).toString();
+                int idx = haystack.indexOf(needle);
+                return idx >= 0 ? idx : -1;
+
+            // === Funzioni per Numeri Casuali ===
+            case "rand":
+                // rand() senza argomenti: [0, RAND_MAX)
+                // rand(max): [0, max)
+                // rand(min, max): [min, max)
+                if (argValues.size() == 0) {
+                    return new java.util.Random().nextInt(Integer.MAX_VALUE);
+                } else if (argValues.size() == 1) {
+                    int max = toInt(argValues.get(0));
+                    return new java.util.Random().nextInt(max);
+                } else if (argValues.size() == 2) {
+                    int min = toInt(argValues.get(0));
+                    int max = toInt(argValues.get(1));
+                    return new java.util.Random().nextInt(max - min) + min;
+                } else {
+                    throw new RuntimeException("rand expects 0, 1, or 2 arguments");
+                }
+
+            // === Funzione Tempo ===
+            case "time":
+                // time() ritorna i secondi dall'epoca Unix (1 gennaio 1970)
+                if (argValues.size() != 0) throw new RuntimeException("time expects 0 arguments");
+                return (int)(System.currentTimeMillis() / 1000);
+
+            default:
+                // Not a built-in function
+                return null;
+        }
+    }
+
+    /**
+     * Converts an object to double.
+     */
+    private double toDouble(Object obj) {
+        if (obj instanceof Number) {
+            return ((Number) obj).doubleValue();
+        }
+        try {
+            return Double.parseDouble(obj.toString());
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Cannot convert '" + obj + "' to double");
+        }
+    }
+
+    /**
+     * Converts an object to int.
+     */
+    private int toInt(Object obj) {
+        if (obj instanceof Number) {
+            return ((Number) obj).intValue();
+        }
+        try {
+            return Integer.parseInt(obj.toString());
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Cannot convert '" + obj + "' to int");
+        }
     }
 }
