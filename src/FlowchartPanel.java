@@ -306,19 +306,20 @@ public class FlowchartPanel extends JPanel {
         // Versione semplificata che funziona con tutte le versioni di JGraphX
         
 
-        // Default edge style
+        // Default edge style - LINEE ORTOGONALI (solo orizzontali/verticali)
         Map<String, Object> edgeStyle = new HashMap<>();
         edgeStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
         edgeStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
         edgeStyle.put(mxConstants.STYLE_STROKEWIDTH, 3.0); // 👈 spessore più grande
         edgeStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
         edgeStyle.put(mxConstants.STYLE_EDGE, mxConstants.EDGESTYLE_ORTHOGONAL);
-        edgeStyle.put(mxConstants.STYLE_ROUNDED, true);
+        edgeStyle.put(mxConstants.STYLE_ROUNDED, false);  // ✓ Angoli a 90° senza arrotondamento
+        edgeStyle.put(mxConstants.STYLE_ORTHOGONAL, true);  // ✓ Forza percorso ortogonale
 
         stylesheet.setDefaultEdgeStyle(edgeStyle);
 
 
-        // True branch - GREEN
+        // True branch - GREEN (linee ortogonali)
         Map<String, Object> trueBranchStyle = new HashMap<>();
         trueBranchStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
         trueBranchStyle.put(mxConstants.STYLE_STROKECOLOR, "#00AA00");
@@ -326,12 +327,13 @@ public class FlowchartPanel extends JPanel {
         trueBranchStyle.put(mxConstants.STYLE_STROKEWIDTH, 3.0);
         trueBranchStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
         trueBranchStyle.put(mxConstants.STYLE_EDGE, mxConstants.EDGESTYLE_ORTHOGONAL);
-        trueBranchStyle.put(mxConstants.STYLE_ROUNDED, true);
+        trueBranchStyle.put(mxConstants.STYLE_ROUNDED, false);  // ✓ Angoli a 90°
+        trueBranchStyle.put(mxConstants.STYLE_ORTHOGONAL, true);  // ✓ Forza percorso ortogonale
         trueBranchStyle.put(mxConstants.STYLE_FONTSIZE, 14);
         trueBranchStyle.put(mxConstants.STYLE_FONTSTYLE, mxConstants.FONT_BOLD);
         stylesheet.putCellStyle("TRUE_BRANCH", trueBranchStyle);
 
-        // False branch - RED
+        // False branch - RED (linee ortogonali)
         Map<String, Object> falseBranchStyle = new HashMap<>();
         falseBranchStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
         falseBranchStyle.put(mxConstants.STYLE_STROKECOLOR, "#CC0000");
@@ -339,7 +341,8 @@ public class FlowchartPanel extends JPanel {
         falseBranchStyle.put(mxConstants.STYLE_STROKEWIDTH, 3.0);
         falseBranchStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
         falseBranchStyle.put(mxConstants.STYLE_EDGE, mxConstants.EDGESTYLE_ORTHOGONAL);
-        falseBranchStyle.put(mxConstants.STYLE_ROUNDED, true);
+        falseBranchStyle.put(mxConstants.STYLE_ROUNDED, false);  // ✓ Angoli a 90°
+        falseBranchStyle.put(mxConstants.STYLE_ORTHOGONAL, true);  // ✓ Forza percorso ortogonale
         falseBranchStyle.put(mxConstants.STYLE_FONTSIZE, 14);
         falseBranchStyle.put(mxConstants.STYLE_FONTSTYLE, mxConstants.FONT_BOLD);
         stylesheet.putCellStyle("FALSE_BRANCH", falseBranchStyle);
@@ -380,6 +383,7 @@ public class FlowchartPanel extends JPanel {
         layout.setInterHierarchySpacing(50);
         layout.setInterRankCellSpacing(40);  // Dimezzato da 80 a 40 per archi più corti
         layout.setOrientation(SwingConstants.NORTH);
+        layout.setDisableEdgeStyle(false);  // IMPORTANTE: Rispetta gli stili ortogonali degli edge
 
         Object parent = graph.getDefaultParent();
         graph.getModel().beginUpdate();
