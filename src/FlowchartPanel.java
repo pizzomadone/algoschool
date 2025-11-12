@@ -376,19 +376,102 @@ public class FlowchartPanel extends JPanel {
     }
 
     /**
+     * Configura waypoints per far uscire lateralmente le ramificazioni dei condizionali
+     */
+    private void configureConditionalBranchWaypoints() {
+        Object parent = graph.getDefaultParent();
+        Object[] vertices = graph.getChildVertices(parent);
+
+        for (Object vertex : vertices) {
+            if (vertex instanceof mxCell) {
+                mxCell cell = (mxCell) vertex;
+                String style = cell.getStyle();
+
+                // Trova i blocchi condizionali
+                if (CONDITIONAL.equals(style) || LOOP.equals(style) || FOR_LOOP.equals(style) || DO_WHILE.equals(style)) {
+                    mxGeometry condGeo = cell.getGeometry();
+                    if (condGeo == null) continue;
+
+                    double condX = condGeo.getCenterX();
+                    double condY = condGeo.getCenterY();
+
+                    // Trova le edge TRUE_BRANCH e FALSE_BRANCH
+                    Object[] edges = graph.getOutgoingEdges(vertex);
+
+                    for (Object edge : edges) {
+                        if (edge instanceof mxCell) {
+                            mxCell edgeCell = (mxCell) edge;
+                            String edgeStyle = edgeCell.getStyle();
+                            Object target = edgeCell.getTarget();
+
+                            if (target instanceof mxCell) {
+                                mxCell targetCell = (mxCell) target;
+                                mxGeometry targetGeo = targetCell.getGeometry();
+                                if (targetGeo == null) continue;
+
+                                double targetX = targetGeo.getCenterX();
+                                double targetY = targetGeo.getCenterY();
+
+                                // Calcola offset laterale (quanto devono uscire le linee)
+                                double lateralOffset = 100.0;  // Distanza laterale dalla linea centrale
+
+                                java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+
+                                if ("TRUE_BRANCH".equals(edgeStyle)) {
+                                    // TRUE (Sì) esce a DESTRA
+                                    // 1. Esci dal condizionale verso destra
+                                    waypoints.add(new mxPoint(condX + lateralOffset, condY));
+                                    // 2. Scendi dritto
+                                    waypoints.add(new mxPoint(condX + lateralOffset, targetY));
+                                    // 3. Rientra al centro verso il target
+                                    waypoints.add(new mxPoint(targetX, targetY));
+
+                                } else if ("FALSE_BRANCH".equals(edgeStyle)) {
+                                    // FALSE (No) esce a SINISTRA
+                                    // 1. Esci dal condizionale verso sinistra
+                                    waypoints.add(new mxPoint(condX - lateralOffset, condY));
+                                    // 2. Scendi dritto
+                                    waypoints.add(new mxPoint(condX - lateralOffset, targetY));
+                                    // 3. Rientra al centro verso il target
+                                    waypoints.add(new mxPoint(targetX, targetY));
+                                }
+
+                                // Applica i waypoints all'edge
+                                if (!waypoints.isEmpty()) {
+                                    mxGeometry edgeGeo = edgeCell.getGeometry();
+                                    if (edgeGeo != null) {
+                                        edgeGeo = (mxGeometry) edgeGeo.clone();
+                                        edgeGeo.setPoints(waypoints);
+                                        graph.getModel().setGeometry(edge, edgeGeo);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Apply hierarchical layout to organize the flowchart
      */
     private void applyHierarchicalLayout() {
         mxHierarchicalLayout layout = new mxHierarchicalLayout(graph);
-        layout.setInterHierarchySpacing(50);
-        layout.setInterRankCellSpacing(40);  // Dimezzato da 80 a 40 per archi più corti
+        layout.setInterHierarchySpacing(120);  // ✓ Spazio laterale maggiore per ramificazioni chiare
+        layout.setInterRankCellSpacing(60);    // ✓ Spazio verticale per linee dritte
+        layout.setIntraCellSpacing(80);        // ✓ Spazio tra celle allo stesso livello
         layout.setOrientation(SwingConstants.NORTH);
-        layout.setDisableEdgeStyle(false);  // IMPORTANTE: Rispetta gli stili ortogonali degli edge
+        layout.setDisableEdgeStyle(false);     // Rispetta gli stili ortogonali degli edge
+        layout.setParallelEdgeSpacing(50);     // ✓ Spazio tra edge paralleli
 
         Object parent = graph.getDefaultParent();
         graph.getModel().beginUpdate();
         try {
             layout.execute(parent);
+
+            // ✓ Configura waypoints per ramificazioni laterali nei condizionali
+            configureConditionalBranchWaypoints();
 
             // Ottieni la geometria del blocco Start per usarlo come punto di riferimento
             mxCell startVertex = (mxCell) startCell;
