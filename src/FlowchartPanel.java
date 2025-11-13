@@ -878,6 +878,25 @@ public class FlowchartPanel extends JPanel {
         }
     }
 
+    /**
+     * Ripristina un edge con etichetta, stile e waypoints originali
+     */
+    private void restoreEdge(Object parent, String label, Object source, Object target,
+                             String style, java.util.List<mxPoint> waypoints) {
+        Object restoredEdge = graph.insertEdge(parent, null, label, source, target, style);
+
+        // Ripristina i waypoints se presenti
+        if (waypoints != null && !waypoints.isEmpty() && restoredEdge instanceof mxCell) {
+            mxCell restoredCell = (mxCell) restoredEdge;
+            mxGeometry geo = restoredCell.getGeometry();
+            if (geo != null) {
+                geo = (mxGeometry) geo.clone();
+                geo.setPoints(waypoints);
+                graph.getModel().setGeometry(restoredEdge, geo);
+            }
+        }
+    }
+
     private void insertBlockOnEdge(Object edge, String blockType) {
         graph.getModel().beginUpdate();
         try {
@@ -886,9 +905,16 @@ public class FlowchartPanel extends JPanel {
             Object target = edgeCell.getTarget();
             Object parent = graph.getDefaultParent();
 
-            // IMPORTANTE: Salva l'etichetta e lo stile dell'edge originale
+            // IMPORTANTE: Salva l'etichetta, lo stile E i waypoints dell'edge originale
             String originalLabel = (String) edgeCell.getValue();
             String originalStyle = edgeCell.getStyle();
+            java.util.List<mxPoint> originalWaypoints = null;
+
+            // Salva i waypoints originali se presenti
+            mxGeometry originalGeometry = edgeCell.getGeometry();
+            if (originalGeometry != null && originalGeometry.getPoints() != null) {
+                originalWaypoints = new java.util.ArrayList<>(originalGeometry.getPoints());
+            }
 
             // Remove the original edge
             graph.removeCells(new Object[]{edge});
@@ -901,7 +927,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (conditionText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
 
@@ -939,7 +965,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (loopText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
 
@@ -977,7 +1003,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (initText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
                 if (initText.trim().isEmpty()) initText = "i = 0";
@@ -987,7 +1013,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (condText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
                 if (condText.trim().isEmpty()) condText = "i < n";
@@ -997,7 +1023,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (incrText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
                 if (incrText.trim().isEmpty()) incrText = "i = i + 1";
@@ -1034,7 +1060,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (condText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
 
@@ -1080,7 +1106,7 @@ public class FlowchartPanel extends JPanel {
                 // Se l'utente ha premuto Annulla, ripristina l'edge e non creare il blocco
                 if (blockText == null) {
                     if (originalLabel == null) originalLabel = "";
-                    graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                    restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
                     return;
                 }
 
@@ -1094,7 +1120,7 @@ public class FlowchartPanel extends JPanel {
                     if (varPart.contains(" ")) {
                         // Ripristina l'edge originale prima di mostrare l'errore
                         if (originalLabel == null) originalLabel = "";
-                        graph.insertEdge(parent, null, originalLabel, source, target, originalStyle);
+                        restoreEdge(parent, originalLabel, source, target, originalStyle, originalWaypoints);
 
                         JOptionPane.showMessageDialog(this,
                             "Errore: Il nome della variabile non può contenere spazi.\n" +
