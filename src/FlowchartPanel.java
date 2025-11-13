@@ -435,34 +435,47 @@ public class FlowchartPanel extends JPanel {
             if (currentTarget instanceof mxCell) {
                 mxCell targetCell = (mxCell) currentTarget;
                 mxGeometry targetGeo = targetCell.getGeometry();
+                String targetStyle = targetCell.getStyle();
 
                 if (targetGeo != null) {
-                    // ✓ IMPORTANTE: Riposiziona il blocco per centrarlo sulla linea laterale
                     double lateralLineX = isTrueBranch ? (condX + lateralOffset) : (condX - lateralOffset);
-
-                    // Centra il blocco sulla linea laterale
-                    double newBlockX = lateralLineX - (targetGeo.getWidth() / 2);
-                    targetGeo.setX(newBlockX);
-
-                    // Aggiorna la geometria del blocco
-                    graph.getModel().setGeometry(currentTarget, targetGeo);
-
-                    // Ora la X del centro del blocco coincide con la linea laterale
                     double targetX = targetGeo.getCenterX();
                     double targetY = targetGeo.getY();  // Top del blocco target
 
+                    // ✓ IMPORTANTE: Riposiziona SOLO i blocchi normali, NON il merge point
+                    boolean targetIsMerge = MERGE.equals(targetStyle);
+
+                    if (!targetIsMerge) {
+                        // Centra il blocco normale sulla linea laterale
+                        double newBlockX = lateralLineX - (targetGeo.getWidth() / 2);
+                        targetGeo.setX(newBlockX);
+                        graph.getModel().setGeometry(currentTarget, targetGeo);
+                        targetX = targetGeo.getCenterX();  // Aggiorna dopo il riposizionamento
+                    }
+                    // Se è un merge point, NON riposizionarlo (resta centrato rispetto al rombo)
+
                     java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
 
-                    if (isTrueBranch) {
-                        // TRUE (Sì) esce a DESTRA
-                        waypoints.add(new mxPoint(lateralLineX, condY));
-                        waypoints.add(new mxPoint(lateralLineX, targetY));
-                        // Non serve il terzo waypoint perché il blocco è già centrato
+                    if (targetIsMerge) {
+                        // Se il target è direttamente il merge point
+                        if (isTrueBranch) {
+                            waypoints.add(new mxPoint(lateralLineX, condY));
+                            waypoints.add(new mxPoint(lateralLineX, targetY));
+                            waypoints.add(new mxPoint(targetX, targetY));  // Rientra al centro del merge
+                        } else {
+                            waypoints.add(new mxPoint(lateralLineX, condY));
+                            waypoints.add(new mxPoint(lateralLineX, targetY));
+                            waypoints.add(new mxPoint(targetX, targetY));  // Rientra al centro del merge
+                        }
                     } else {
-                        // FALSE (No) esce a SINISTRA
-                        waypoints.add(new mxPoint(lateralLineX, condY));
-                        waypoints.add(new mxPoint(lateralLineX, targetY));
-                        // Non serve il terzo waypoint perché il blocco è già centrato
+                        // Se è un blocco normale (già centrato sulla linea laterale)
+                        if (isTrueBranch) {
+                            waypoints.add(new mxPoint(lateralLineX, condY));
+                            waypoints.add(new mxPoint(lateralLineX, targetY));
+                        } else {
+                            waypoints.add(new mxPoint(lateralLineX, condY));
+                            waypoints.add(new mxPoint(lateralLineX, targetY));
+                        }
                     }
 
                     mxGeometry edgeGeo = edgeCell.getGeometry();
@@ -472,8 +485,10 @@ public class FlowchartPanel extends JPanel {
                         graph.getModel().setGeometry(currentEdge, edgeGeo);
                     }
 
-                    // Continua con le edge successive nella catena
-                    configureBranchChainRecursive(currentTarget, condX, lateralOffset, isTrueBranch, null);
+                    // Continua con le edge successive nella catena solo se NON è il merge point
+                    if (!targetIsMerge) {
+                        configureBranchChainRecursive(currentTarget, condX, lateralOffset, isTrueBranch, null);
+                    }
                 }
             }
         }
