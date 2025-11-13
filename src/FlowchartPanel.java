@@ -377,6 +377,7 @@ public class FlowchartPanel extends JPanel {
 
     /**
      * Configura waypoints per far uscire lateralmente le ramificazioni dei condizionali
+     * e mantenere linee dritte anche con blocchi intermedi
      */
     private void configureConditionalBranchWaypoints() {
         Object parent = graph.getDefaultParent();
@@ -402,50 +403,139 @@ public class FlowchartPanel extends JPanel {
                         if (edge instanceof mxCell) {
                             mxCell edgeCell = (mxCell) edge;
                             String edgeStyle = edgeCell.getStyle();
-                            Object target = edgeCell.getTarget();
 
-                            if (target instanceof mxCell) {
-                                mxCell targetCell = (mxCell) target;
-                                mxGeometry targetGeo = targetCell.getGeometry();
-                                if (targetGeo == null) continue;
-
-                                double targetX = targetGeo.getCenterX();
-                                double targetY = targetGeo.getCenterY();
-
-                                // Calcola offset laterale (quanto devono uscire le linee)
+                            if ("TRUE_BRANCH".equals(edgeStyle) || "FALSE_BRANCH".equals(edgeStyle)) {
+                                boolean isTrueBranch = "TRUE_BRANCH".equals(edgeStyle);
                                 double lateralOffset = 100.0;  // Distanza laterale dalla linea centrale
 
-                                java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-
-                                if ("TRUE_BRANCH".equals(edgeStyle)) {
-                                    // TRUE (Sì) esce a DESTRA
-                                    // 1. Esci dal condizionale verso destra
-                                    waypoints.add(new mxPoint(condX + lateralOffset, condY));
-                                    // 2. Scendi dritto
-                                    waypoints.add(new mxPoint(condX + lateralOffset, targetY));
-                                    // 3. Rientra al centro verso il target
-                                    waypoints.add(new mxPoint(targetX, targetY));
-
-                                } else if ("FALSE_BRANCH".equals(edgeStyle)) {
-                                    // FALSE (No) esce a SINISTRA
-                                    // 1. Esci dal condizionale verso sinistra
-                                    waypoints.add(new mxPoint(condX - lateralOffset, condY));
-                                    // 2. Scendi dritto
-                                    waypoints.add(new mxPoint(condX - lateralOffset, targetY));
-                                    // 3. Rientra al centro verso il target
-                                    waypoints.add(new mxPoint(targetX, targetY));
-                                }
-
-                                // Applica i waypoints all'edge
-                                if (!waypoints.isEmpty()) {
-                                    mxGeometry edgeGeo = edgeCell.getGeometry();
-                                    if (edgeGeo != null) {
-                                        edgeGeo = (mxGeometry) edgeGeo.clone();
-                                        edgeGeo.setPoints(waypoints);
-                                        graph.getModel().setGeometry(edge, edgeGeo);
-                                    }
-                                }
+                                // Segui l'intera catena di blocchi fino al merge point
+                                configureEdgeChain(edge, condX, condY, lateralOffset, isTrueBranch);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Configura i waypoints per una catena di edge (dal condizionale al merge point)
+     */
+    private void configureEdgeChain(Object startEdge, double condX, double condY, double lateralOffset, boolean isTrueBranch) {
+        Object currentEdge = startEdge;
+        Object currentSource = null;
+        Object currentTarget = null;
+
+        // Prima edge: dal condizionale al primo blocco
+        if (currentEdge instanceof mxCell) {
+            mxCell edgeCell = (mxCell) currentEdge;
+            currentSource = edgeCell.getSource();
+            currentTarget = edgeCell.getTarget();
+
+            if (currentTarget instanceof mxCell) {
+                mxCell targetCell = (mxCell) currentTarget;
+                mxGeometry targetGeo = targetCell.getGeometry();
+
+                if (targetGeo != null) {
+                    double targetX = targetGeo.getCenterX();
+                    double targetY = targetGeo.getY();  // Top del blocco target
+
+                    java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+
+                    if (isTrueBranch) {
+                        // TRUE (Sì) esce a DESTRA
+                        waypoints.add(new mxPoint(condX + lateralOffset, condY));
+                        waypoints.add(new mxPoint(condX + lateralOffset, targetY));
+                        waypoints.add(new mxPoint(targetX, targetY));
+                    } else {
+                        // FALSE (No) esce a SINISTRA
+                        waypoints.add(new mxPoint(condX - lateralOffset, condY));
+                        waypoints.add(new mxPoint(condX - lateralOffset, targetY));
+                        waypoints.add(new mxPoint(targetX, targetY));
+                    }
+
+                    mxGeometry edgeGeo = edgeCell.getGeometry();
+                    if (edgeGeo != null) {
+                        edgeGeo = (mxGeometry) edgeGeo.clone();
+                        edgeGeo.setPoints(waypoints);
+                        graph.getModel().setGeometry(currentEdge, edgeGeo);
+                    }
+
+                    // Continua con le edge successive nella catena
+                    configureBranchChainRecursive(currentTarget, condX, lateralOffset, isTrueBranch, null);
+                }
+            }
+        }
+    }
+
+    /**
+     * Configura ricorsivamente i waypoints per le edge successive in un ramo
+     */
+    private void configureBranchChainRecursive(Object currentBlock, double condX, double lateralOffset,
+                                                boolean isTrueBranch, Object mergePoint) {
+        if (currentBlock == null || !(currentBlock instanceof mxCell)) return;
+
+        mxCell currentCell = (mxCell) currentBlock;
+        String currentStyle = currentCell.getStyle();
+
+        // Se questo è il merge point, fermati
+        if (MERGE.equals(currentStyle)) return;
+
+        // Trova l'edge uscente
+        Object[] outEdges = graph.getOutgoingEdges(currentBlock);
+        if (outEdges == null || outEdges.length == 0) return;
+
+        for (Object outEdge : outEdges) {
+            if (outEdge instanceof mxCell) {
+                mxCell edgeCell = (mxCell) outEdge;
+                Object target = edgeCell.getTarget();
+
+                if (target instanceof mxCell) {
+                    mxCell targetCell = (mxCell) target;
+                    mxGeometry targetGeo = targetCell.getGeometry();
+                    mxGeometry currentGeo = currentCell.getGeometry();
+
+                    if (targetGeo != null && currentGeo != null) {
+                        double currentX = currentGeo.getCenterX();
+                        double currentBottomY = currentGeo.getY() + currentGeo.getHeight();
+
+                        String targetStyle = targetCell.getStyle();
+                        boolean targetIsMerge = MERGE.equals(targetStyle);
+
+                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+
+                        if (targetIsMerge) {
+                            // Questo è l'ultimo edge verso il merge point
+                            double mergeX = targetGeo.getCenterX();
+                            double mergeY = targetGeo.getCenterY();
+
+                            // Scendi dritto dalla X del blocco corrente
+                            waypoints.add(new mxPoint(currentX, currentBottomY));
+                            waypoints.add(new mxPoint(currentX, mergeY));
+                            // Poi vira orizzontalmente verso il merge
+                            waypoints.add(new mxPoint(mergeX, mergeY));
+
+                        } else {
+                            // Blocco intermedio: scendi dritto fino al prossimo blocco
+                            double targetX = targetGeo.getCenterX();
+                            double targetTopY = targetGeo.getY();
+
+                            waypoints.add(new mxPoint(currentX, currentBottomY));
+                            waypoints.add(new mxPoint(currentX, targetTopY));
+                            waypoints.add(new mxPoint(targetX, targetTopY));
+                        }
+
+                        // Applica waypoints
+                        mxGeometry edgeGeo = edgeCell.getGeometry();
+                        if (edgeGeo != null) {
+                            edgeGeo = (mxGeometry) edgeGeo.clone();
+                            edgeGeo.setPoints(waypoints);
+                            graph.getModel().setGeometry(outEdge, edgeGeo);
+                        }
+
+                        // Continua ricorsivamente
+                        if (!targetIsMerge) {
+                            configureBranchChainRecursive(target, condX, lateralOffset, isTrueBranch, mergePoint);
                         }
                     }
                 }
@@ -997,10 +1087,11 @@ public class FlowchartPanel extends JPanel {
                     0, 0, width, height, blockType);
 
                 // Reconnect: source -> newBlock -> target
-                // IMPORTANTE: Preserva l'etichetta e lo stile dell'edge originale sulla prima freccia
+                // IMPORTANTE: Preserva l'etichetta e lo stile dell'edge originale su ENTRAMBE le frecce
                 if (originalLabel == null) originalLabel = "";
                 graph.insertEdge(parent, null, originalLabel, source, newBlock, originalStyle);
-                graph.insertEdge(parent, null, "", newBlock, target);
+                // ✓ Preserva lo stile anche sull'edge uscente (per TRUE_BRANCH/FALSE_BRANCH)
+                graph.insertEdge(parent, null, "", newBlock, target, originalStyle);
             }
 
             // Apply layout to reorganize
