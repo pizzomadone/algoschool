@@ -437,6 +437,17 @@ public class FlowchartPanel extends JPanel {
                 mxGeometry targetGeo = targetCell.getGeometry();
 
                 if (targetGeo != null) {
+                    // ✓ IMPORTANTE: Riposiziona il blocco per centrarlo sulla linea laterale
+                    double lateralLineX = isTrueBranch ? (condX + lateralOffset) : (condX - lateralOffset);
+
+                    // Centra il blocco sulla linea laterale
+                    double newBlockX = lateralLineX - (targetGeo.getWidth() / 2);
+                    targetGeo.setX(newBlockX);
+
+                    // Aggiorna la geometria del blocco
+                    graph.getModel().setGeometry(currentTarget, targetGeo);
+
+                    // Ora la X del centro del blocco coincide con la linea laterale
                     double targetX = targetGeo.getCenterX();
                     double targetY = targetGeo.getY();  // Top del blocco target
 
@@ -444,14 +455,14 @@ public class FlowchartPanel extends JPanel {
 
                     if (isTrueBranch) {
                         // TRUE (Sì) esce a DESTRA
-                        waypoints.add(new mxPoint(condX + lateralOffset, condY));
-                        waypoints.add(new mxPoint(condX + lateralOffset, targetY));
-                        waypoints.add(new mxPoint(targetX, targetY));
+                        waypoints.add(new mxPoint(lateralLineX, condY));
+                        waypoints.add(new mxPoint(lateralLineX, targetY));
+                        // Non serve il terzo waypoint perché il blocco è già centrato
                     } else {
                         // FALSE (No) esce a SINISTRA
-                        waypoints.add(new mxPoint(condX - lateralOffset, condY));
-                        waypoints.add(new mxPoint(condX - lateralOffset, targetY));
-                        waypoints.add(new mxPoint(targetX, targetY));
+                        waypoints.add(new mxPoint(lateralLineX, condY));
+                        waypoints.add(new mxPoint(lateralLineX, targetY));
+                        // Non serve il terzo waypoint perché il blocco è già centrato
                     }
 
                     mxGeometry edgeGeo = edgeCell.getGeometry();
@@ -496,6 +507,7 @@ public class FlowchartPanel extends JPanel {
                     mxGeometry currentGeo = currentCell.getGeometry();
 
                     if (targetGeo != null && currentGeo != null) {
+                        // ✓ La X del blocco corrente (già posizionato sulla linea laterale)
                         double currentX = currentGeo.getCenterX();
                         double currentBottomY = currentGeo.getY() + currentGeo.getHeight();
 
@@ -516,13 +528,16 @@ public class FlowchartPanel extends JPanel {
                             waypoints.add(new mxPoint(mergeX, mergeY));
 
                         } else {
-                            // Blocco intermedio: scendi dritto fino al prossimo blocco
-                            double targetX = targetGeo.getCenterX();
-                            double targetTopY = targetGeo.getY();
+                            // ✓ Blocco intermedio: riposizionalo sulla stessa linea verticale
+                            double newTargetX = currentX - (targetGeo.getWidth() / 2);
+                            targetGeo.setX(newTargetX);
+                            graph.getModel().setGeometry(target, targetGeo);
 
+                            // Ora scendi dritto (il blocco è allineato)
+                            double targetTopY = targetGeo.getY();
                             waypoints.add(new mxPoint(currentX, currentBottomY));
                             waypoints.add(new mxPoint(currentX, targetTopY));
-                            waypoints.add(new mxPoint(targetX, targetTopY));
+                            // Non serve il terzo waypoint perché il blocco è allineato
                         }
 
                         // Applica waypoints
