@@ -884,10 +884,9 @@ public class FlowchartPanel extends JPanel {
         double spacing = 40.0;
         double totalSpace = totalHeight + (blocks.size() - 1) * spacing;
 
-        // ✓ Spazio extra sopra i blocchi per permettere all'arco di salire e virare a sinistra
-        // L'arco deve: uscire dal top del blocco → salire → virare a sinistra → arrivare al merge
-        double mergeSpacing = 120.0;  // Spazio sufficiente per la risalita e virata
-        double startY = forTopY - totalSpace - mergeSpacing;
+        // ✓ Posiziona i blocchi sopra il FOR con margine ragionevole
+        double blockTopMargin = 80.0;  // Spazio tra FOR e primo blocco
+        double startY = forTopY - totalSpace - blockTopMargin;
 
         // Posiziona ogni blocco
         double currentY = startY;
@@ -904,7 +903,8 @@ public class FlowchartPanel extends JPanel {
             }
         }
 
-        // ✓ IMPORTANTE: Riposiziona il merge point SOPRA i blocchi
+        // ✓ IMPORTANTE: Merge point POCO sopra il primo blocco
+        double mergeTopMargin = 60.0;  // Solo 60px sopra il primo blocco
         Object[] edges = graph.getOutgoingEdges(forLoop);
         for (Object edge : edges) {
             if (edge instanceof mxCell) {
@@ -915,10 +915,9 @@ public class FlowchartPanel extends JPanel {
                         mxCell mergeCell = (mxCell) mergePoint;
                         mxGeometry mergeGeo = mergeCell.getGeometry();
                         if (mergeGeo != null) {
-                            // Posiziona il merge point sopra i blocchi
                             double forCenterX = forGeo.getCenterX();
                             double newMergeX = forCenterX - (mergeGeo.getWidth() / 2);
-                            double newMergeY = startY - mergeSpacing;
+                            double newMergeY = startY - mergeTopMargin;  // POCO sopra il primo blocco
 
                             mergeGeo.setX(newMergeX);
                             mergeGeo.setY(newMergeY);
