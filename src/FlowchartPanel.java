@@ -874,7 +874,7 @@ public class FlowchartPanel extends JPanel {
         double lateralOffset = 120.0;
         double lateralLineX = forRightX + lateralOffset;
 
-        // Calcola altezza totale
+        // Calcola altezza totale dei blocchi
         double totalHeight = 0;
         for (Object block : blocks) {
             mxGeometry geo = ((mxCell) block).getGeometry();
@@ -883,7 +883,10 @@ public class FlowchartPanel extends JPanel {
 
         double spacing = 40.0;
         double totalSpace = totalHeight + (blocks.size() - 1) * spacing;
-        double startY = forTopY - totalSpace - 20;
+
+        // ✓ Spazio extra sopra i blocchi per il merge point
+        double mergeSpacing = 60.0;
+        double startY = forTopY - totalSpace - mergeSpacing;
 
         // Posiziona ogni blocco
         double currentY = startY;
@@ -897,6 +900,32 @@ public class FlowchartPanel extends JPanel {
                 graph.getModel().setGeometry(block, blockGeo);
 
                 currentY += blockGeo.getHeight() + spacing;
+            }
+        }
+
+        // ✓ IMPORTANTE: Riposiziona il merge point SOPRA i blocchi
+        Object[] edges = graph.getOutgoingEdges(forLoop);
+        for (Object edge : edges) {
+            if (edge instanceof mxCell) {
+                mxCell edgeCell = (mxCell) edge;
+                if ("TRUE_BRANCH".equals(edgeCell.getStyle())) {
+                    Object mergePoint = edgeCell.getTarget();
+                    if (mergePoint instanceof mxCell) {
+                        mxCell mergeCell = (mxCell) mergePoint;
+                        mxGeometry mergeGeo = mergeCell.getGeometry();
+                        if (mergeGeo != null) {
+                            // Posiziona il merge point sopra i blocchi
+                            double forCenterX = forGeo.getCenterX();
+                            double newMergeX = forCenterX - (mergeGeo.getWidth() / 2);
+                            double newMergeY = startY - mergeSpacing;
+
+                            mergeGeo.setX(newMergeX);
+                            mergeGeo.setY(newMergeY);
+                            graph.getModel().setGeometry(mergePoint, mergeGeo);
+                        }
+                    }
+                    break;
+                }
             }
         }
     }
