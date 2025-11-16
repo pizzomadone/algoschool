@@ -376,6 +376,100 @@ public class FlowchartPanel extends JPanel {
     }
 
     /**
+     * Configura waypoints per il ciclo FOR con arco SI che torna indietro
+     */
+    private void configureForLoopWaypoints() {
+        Object parent = graph.getDefaultParent();
+        Object[] vertices = graph.getChildVertices(parent);
+
+        for (Object vertex : vertices) {
+            if (vertex instanceof mxCell) {
+                mxCell cell = (mxCell) vertex;
+                String style = cell.getStyle();
+
+                if (FOR_LOOP.equals(style)) {
+                    mxGeometry forGeo = cell.getGeometry();
+                    if (forGeo == null) continue;
+
+                    double forX = forGeo.getCenterX();
+                    double forY = forGeo.getCenterY();
+                    double forRightX = forGeo.getX() + forGeo.getWidth();  // Lato destro
+                    double forBottomY = forGeo.getY() + forGeo.getHeight();  // Base
+
+                    // Trova gli archi TRUE_BRANCH e FALSE_BRANCH
+                    Object[] edges = graph.getOutgoingEdges(vertex);
+                    Object mergePoint = null;
+
+                    // Prima trova il merge point (target dell'arco TRUE_BRANCH)
+                    for (Object edge : edges) {
+                        if (edge instanceof mxCell) {
+                            mxCell edgeCell = (mxCell) edge;
+                            String edgeStyle = edgeCell.getStyle();
+                            if ("TRUE_BRANCH".equals(edgeStyle)) {
+                                mergePoint = edgeCell.getTarget();
+                                break;
+                            }
+                        }
+                    }
+
+                    if (mergePoint instanceof mxCell) {
+                        mxCell mergeCell = (mxCell) mergePoint;
+                        mxGeometry mergeGeo = mergeCell.getGeometry();
+
+                        if (mergeGeo != null) {
+                            double mergeX = mergeGeo.getCenterX();
+                            double mergeY = mergeGeo.getCenterY();
+
+                            // Configura waypoints per ogni edge
+                            for (Object edge : edges) {
+                                if (edge instanceof mxCell) {
+                                    mxCell edgeCell = (mxCell) edge;
+                                    String edgeStyle = edgeCell.getStyle();
+
+                                    if ("TRUE_BRANCH".equals(edgeStyle)) {
+                                        // ✓ Arco SI: esce da destra, va a destra, torna indietro a sinistra
+                                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+
+                                        double lateralOffset = 120.0;  // Quanto va a destra
+
+                                        // 1. Esci dal lato destro del FOR
+                                        waypoints.add(new mxPoint(forRightX + lateralOffset, forY));
+                                        // 2. Vai in alto all'altezza del merge point
+                                        waypoints.add(new mxPoint(forRightX + lateralOffset, mergeY));
+                                        // 3. Torna a sinistra verso il merge point
+                                        waypoints.add(new mxPoint(mergeX, mergeY));
+
+                                        mxGeometry edgeGeo = edgeCell.getGeometry();
+                                        if (edgeGeo != null) {
+                                            edgeGeo = (mxGeometry) edgeGeo.clone();
+                                            edgeGeo.setPoints(waypoints);
+                                            graph.getModel().setGeometry(edge, edgeGeo);
+                                        }
+
+                                    } else if ("FALSE_BRANCH".equals(edgeStyle)) {
+                                        // ✓ Arco NO: esce dal centro della base, scende dritto
+                                        // Nessun waypoint necessario, sarà dritto per default
+                                        // Oppure aggiungi waypoint per forzare uscita dal basso
+                                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+                                        waypoints.add(new mxPoint(forX, forBottomY));
+
+                                        mxGeometry edgeGeo = edgeCell.getGeometry();
+                                        if (edgeGeo != null) {
+                                            edgeGeo = (mxGeometry) edgeGeo.clone();
+                                            edgeGeo.setPoints(waypoints);
+                                            graph.getModel().setGeometry(edge, edgeGeo);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Configura waypoints per far uscire lateralmente le ramificazioni dei condizionali
      * e mantenere linee dritte anche con blocchi intermedi
      */
@@ -388,8 +482,8 @@ public class FlowchartPanel extends JPanel {
                 mxCell cell = (mxCell) vertex;
                 String style = cell.getStyle();
 
-                // Trova i blocchi condizionali
-                if (CONDITIONAL.equals(style) || LOOP.equals(style) || FOR_LOOP.equals(style) || DO_WHILE.equals(style)) {
+                // Trova i blocchi condizionali (escluso FOR_LOOP che ha gestione separata)
+                if (CONDITIONAL.equals(style) || LOOP.equals(style) || DO_WHILE.equals(style)) {
                     mxGeometry condGeo = cell.getGeometry();
                     if (condGeo == null) continue;
 
@@ -592,6 +686,9 @@ public class FlowchartPanel extends JPanel {
 
             // ✓ Configura waypoints per ramificazioni laterali nei condizionali
             configureConditionalBranchWaypoints();
+
+            // ✓ Configura waypoints per cicli FOR (arco SI che torna indietro)
+            configureForLoopWaypoints();
 
             // Ottieni la geometria del blocco Start per usarlo come punto di riferimento
             mxCell startVertex = (mxCell) startCell;
@@ -1035,21 +1132,21 @@ public class FlowchartPanel extends JPanel {
                 Object forBlock = graph.insertVertex(parent, null, forText,
                     0, 0, 180, 70, FOR_LOOP);
 
-                // Create merge point for loop body
-                Object bodyMergePoint = graph.insertVertex(parent, null, "",
+                // ✓ Create merge point SOPRA il FOR (per il loop back)
+                // Questo merge point sarà posizionato tra source e forBlock
+                Object loopMergePoint = graph.insertVertex(parent, null, "",
                     0, 0, 15, 15, MERGE);
 
-                // Connect source to for loop - IMPORTANTE: preserva etichetta e stile originali
+                // Connect: source → loopMergePoint → forBlock
                 if (originalLabel == null) originalLabel = "";
-                graph.insertEdge(parent, null, originalLabel, source, forBlock, originalStyle);
+                graph.insertEdge(parent, null, originalLabel, source, loopMergePoint, originalStyle);
+                graph.insertEdge(parent, null, "", loopMergePoint, forBlock);
 
-                // Yes branch: enter loop body (GREEN arrow)
-                graph.insertEdge(parent, null, "Yes", forBlock, bodyMergePoint, "TRUE_BRANCH");
+                // ✓ Arco SI (Yes): torna indietro dal FOR al merge point
+                // Questo arco uscirà dal lato destro e tornerà indietro
+                graph.insertEdge(parent, null, "Yes", forBlock, loopMergePoint, "TRUE_BRANCH");
 
-                // Loop back: from body merge point to for loop
-                graph.insertEdge(parent, null, "", bodyMergePoint, forBlock);
-
-                // No branch: exit loop (RED arrow)
+                // ✓ Arco NO (No): esce dal basso del FOR verso il target
                 graph.insertEdge(parent, null, "No", forBlock, target, "FALSE_BRANCH");
 
             } else if (DO_WHILE.equals(blockType)) {
