@@ -455,35 +455,35 @@ public class FlowchartPanel extends JPanel {
                         if (mergeGeo != null) {
                             double mergeX = mergeGeo.getCenterX();
                             double mergeY = mergeGeo.getCenterY();
+                            double lateralOffset = 120.0;  // Distanza laterale a destra
+                            double lateralLineX = forRightX + lateralOffset;  // X della linea laterale
 
-                            // Configura waypoints per ogni edge
+                            // ✓ Gestisci arco TRUE_BRANCH con possibili blocchi intermedi
+                            Object trueBranchEdge = null;
+                            for (Object edge : edges) {
+                                if (edge instanceof mxCell) {
+                                    mxCell edgeCell = (mxCell) edge;
+                                    String edgeStyle = edgeCell.getStyle();
+                                    if ("TRUE_BRANCH".equals(edgeStyle)) {
+                                        trueBranchEdge = edge;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (trueBranchEdge != null) {
+                                // Configura la catena di blocchi nel ramo SI
+                                configureForLoopTrueBranchChain(trueBranchEdge, forX, forY, forRightX,
+                                    lateralLineX, mergeX, mergeY, mergePoint);
+                            }
+
+                            // ✓ Arco NO: esce dal centro della base, scende dritto
                             for (Object edge : edges) {
                                 if (edge instanceof mxCell) {
                                     mxCell edgeCell = (mxCell) edge;
                                     String edgeStyle = edgeCell.getStyle();
 
-                                    if ("TRUE_BRANCH".equals(edgeStyle)) {
-                                        // ✓ Arco SI: esce da destra, va a destra, torna indietro a sinistra
-                                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-
-                                        double lateralOffset = 120.0;  // Quanto va a destra
-
-                                        // 1. Esci dal lato destro del FOR
-                                        waypoints.add(new mxPoint(forRightX + lateralOffset, forY));
-                                        // 2. Vai in alto all'altezza del merge point
-                                        waypoints.add(new mxPoint(forRightX + lateralOffset, mergeY));
-                                        // 3. Torna a sinistra verso il merge point
-                                        waypoints.add(new mxPoint(mergeX, mergeY));
-
-                                        mxGeometry edgeGeo = edgeCell.getGeometry();
-                                        if (edgeGeo != null) {
-                                            edgeGeo = (mxGeometry) edgeGeo.clone();
-                                            edgeGeo.setPoints(waypoints);
-                                            graph.getModel().setGeometry(edge, edgeGeo);
-                                        }
-
-                                    } else if ("FALSE_BRANCH".equals(edgeStyle)) {
-                                        // ✓ Arco NO: esce dal centro della base, scende dritto
+                                    if ("FALSE_BRANCH".equals(edgeStyle)) {
                                         java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
                                         waypoints.add(new mxPoint(forX, forBottomY));
 
@@ -497,6 +497,137 @@ public class FlowchartPanel extends JPanel {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Configura la catena di blocchi nel ramo TRUE_BRANCH del FOR con arco che torna indietro
+     */
+    private void configureForLoopTrueBranchChain(Object trueBranchEdge, double forX, double forY,
+                                                  double forRightX, double lateralLineX,
+                                                  double mergeX, double mergeY, Object mergePoint) {
+        if (!(trueBranchEdge instanceof mxCell)) return;
+
+        mxCell edgeCell = (mxCell) trueBranchEdge;
+        Object target = edgeCell.getTarget();
+
+        // Se il target è direttamente il merge point (nessun blocco intermedio)
+        if (target == mergePoint) {
+            // Arco SI: esce da destra, va a destra, torna indietro a sinistra
+            java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+            waypoints.add(new mxPoint(lateralLineX, forY));
+            waypoints.add(new mxPoint(lateralLineX, mergeY));
+            waypoints.add(new mxPoint(mergeX, mergeY));
+
+            mxGeometry edgeGeo = edgeCell.getGeometry();
+            if (edgeGeo != null) {
+                edgeGeo = (mxGeometry) edgeGeo.clone();
+                edgeGeo.setPoints(waypoints);
+                graph.getModel().setGeometry(trueBranchEdge, edgeGeo);
+            }
+            return;
+        }
+
+        // ✓ Ci sono blocchi intermedi - configura la catena
+        if (target instanceof mxCell) {
+            mxCell targetCell = (mxCell) target;
+            mxGeometry targetGeo = targetCell.getGeometry();
+
+            if (targetGeo != null) {
+                // Riposiziona il primo blocco sulla linea laterale
+                double newBlockX = lateralLineX - (targetGeo.getWidth() / 2);
+                targetGeo.setX(newBlockX);
+                graph.getModel().setGeometry(target, targetGeo);
+
+                double targetTopY = targetGeo.getY();
+
+                // Waypoints dall'FOR al primo blocco: esce a destra, scende sulla linea laterale
+                java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+                waypoints.add(new mxPoint(lateralLineX, forY));
+                waypoints.add(new mxPoint(lateralLineX, targetTopY));
+
+                mxGeometry edgeGeo = edgeCell.getGeometry();
+                if (edgeGeo != null) {
+                    edgeGeo = (mxGeometry) edgeGeo.clone();
+                    edgeGeo.setPoints(waypoints);
+                    graph.getModel().setGeometry(trueBranchEdge, edgeGeo);
+                }
+
+                // Continua ricorsivamente con i blocchi successivi
+                configureForLoopBlockChainRecursive(target, lateralLineX, mergeX, mergeY, mergePoint);
+            }
+        }
+    }
+
+    /**
+     * Configura ricorsivamente i blocchi intermedi nel ramo SI del FOR
+     */
+    private void configureForLoopBlockChainRecursive(Object currentBlock, double lateralLineX,
+                                                      double mergeX, double mergeY, Object mergePoint) {
+        if (currentBlock == null || !(currentBlock instanceof mxCell)) return;
+
+        mxCell currentCell = (mxCell) currentBlock;
+        mxGeometry currentGeo = currentCell.getGeometry();
+        if (currentGeo == null) return;
+
+        double currentX = currentGeo.getCenterX();
+        double currentBottomY = currentGeo.getY() + currentGeo.getHeight();
+
+        Object[] outEdges = graph.getOutgoingEdges(currentBlock);
+        if (outEdges == null || outEdges.length == 0) return;
+
+        for (Object outEdge : outEdges) {
+            if (outEdge instanceof mxCell) {
+                mxCell edgeCell = (mxCell) outEdge;
+                Object target = edgeCell.getTarget();
+
+                if (target == mergePoint) {
+                    // ✓ Questo è l'ultimo edge che torna al merge point
+                    java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+                    // Scendi dritto
+                    waypoints.add(new mxPoint(currentX, currentBottomY));
+                    // Vai a destra se necessario (alla linea laterale)
+                    waypoints.add(new mxPoint(lateralLineX, currentBottomY));
+                    // Sale all'altezza del merge
+                    waypoints.add(new mxPoint(lateralLineX, mergeY));
+                    // Torna a sinistra al merge
+                    waypoints.add(new mxPoint(mergeX, mergeY));
+
+                    mxGeometry edgeGeo = edgeCell.getGeometry();
+                    if (edgeGeo != null) {
+                        edgeGeo = (mxGeometry) edgeGeo.clone();
+                        edgeGeo.setPoints(waypoints);
+                        graph.getModel().setGeometry(outEdge, edgeGeo);
+                    }
+
+                } else if (target instanceof mxCell) {
+                    // ✓ Blocco intermedio: riposizionalo sulla linea laterale e scendi dritto
+                    mxCell targetCell = (mxCell) target;
+                    mxGeometry targetGeo = targetCell.getGeometry();
+
+                    if (targetGeo != null) {
+                        double newTargetX = lateralLineX - (targetGeo.getWidth() / 2);
+                        targetGeo.setX(newTargetX);
+                        graph.getModel().setGeometry(target, targetGeo);
+
+                        double targetTopY = targetGeo.getY();
+
+                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+                        waypoints.add(new mxPoint(currentX, currentBottomY));
+                        waypoints.add(new mxPoint(currentX, targetTopY));
+
+                        mxGeometry edgeGeo = edgeCell.getGeometry();
+                        if (edgeGeo != null) {
+                            edgeGeo = (mxGeometry) edgeGeo.clone();
+                            edgeGeo.setPoints(waypoints);
+                            graph.getModel().setGeometry(outEdge, edgeGeo);
+                        }
+
+                        // Continua ricorsivamente
+                        configureForLoopBlockChainRecursive(target, lateralLineX, mergeX, mergeY, mergePoint);
                     }
                 }
             }
