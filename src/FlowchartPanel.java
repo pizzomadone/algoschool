@@ -542,12 +542,12 @@ public class FlowchartPanel extends JPanel {
                 targetGeo.setX(newBlockX);
                 graph.getModel().setGeometry(target, targetGeo);
 
-                double targetTopY = targetGeo.getY();
+                double targetBottomY = targetGeo.getY() + targetGeo.getHeight();  // ✓ BASE del blocco
 
-                // Waypoints dall'FOR al primo blocco: esce a destra, scende sulla linea laterale
+                // ✓ Waypoints dall'FOR al primo blocco: esce a destra, SALE alla BASE del blocco
                 java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                waypoints.add(new mxPoint(lateralLineX, forY));
-                waypoints.add(new mxPoint(lateralLineX, targetTopY));
+                waypoints.add(new mxPoint(lateralLineX, forY));  // Esce dal lato destro
+                waypoints.add(new mxPoint(lateralLineX, targetBottomY));  // SALE alla base del blocco
 
                 mxGeometry edgeGeo = edgeCell.getGeometry();
                 if (edgeGeo != null) {
@@ -573,8 +573,8 @@ public class FlowchartPanel extends JPanel {
         mxGeometry currentGeo = currentCell.getGeometry();
         if (currentGeo == null) return;
 
-        double currentX = currentGeo.getCenterX();
-        double currentBottomY = currentGeo.getY() + currentGeo.getHeight();
+        double currentX = currentGeo.getCenterX();  // Centro X (già su lateralLineX)
+        double currentTopY = currentGeo.getY();  // ✓ TOP del blocco (da dove esce la freccia)
 
         Object[] outEdges = graph.getOutgoingEdges(currentBlock);
         if (outEdges == null || outEdges.length == 0) return;
@@ -585,15 +585,12 @@ public class FlowchartPanel extends JPanel {
                 Object target = edgeCell.getTarget();
 
                 if (target == mergePoint) {
-                    // ✓ Questo è l'ultimo edge che torna al merge point
+                    // ✓ Ultimo edge che torna al merge point
                     java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                    // Scendi dritto
-                    waypoints.add(new mxPoint(currentX, currentBottomY));
-                    // Vai a destra se necessario (alla linea laterale)
-                    waypoints.add(new mxPoint(lateralLineX, currentBottomY));
-                    // Sale all'altezza del merge
-                    waypoints.add(new mxPoint(lateralLineX, mergeY));
-                    // Torna a sinistra al merge
+                    // Esce dal TOP del blocco, SALE dritto fino all'altezza del merge
+                    waypoints.add(new mxPoint(currentX, currentTopY));
+                    waypoints.add(new mxPoint(currentX, mergeY));
+                    // Rientra orizzontalmente a SINISTRA verso il merge
                     waypoints.add(new mxPoint(mergeX, mergeY));
 
                     mxGeometry edgeGeo = edgeCell.getGeometry();
@@ -604,7 +601,7 @@ public class FlowchartPanel extends JPanel {
                     }
 
                 } else if (target instanceof mxCell) {
-                    // ✓ Blocco intermedio: riposizionalo sulla linea laterale e scendi dritto
+                    // ✓ Blocco intermedio: riposizionalo sulla linea laterale e SALI dritto
                     mxCell targetCell = (mxCell) target;
                     mxGeometry targetGeo = targetCell.getGeometry();
 
@@ -613,11 +610,12 @@ public class FlowchartPanel extends JPanel {
                         targetGeo.setX(newTargetX);
                         graph.getModel().setGeometry(target, targetGeo);
 
-                        double targetTopY = targetGeo.getY();
+                        double targetBottomY = targetGeo.getY() + targetGeo.getHeight();  // ✓ BASE del prossimo blocco
 
                         java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                        waypoints.add(new mxPoint(currentX, currentBottomY));
-                        waypoints.add(new mxPoint(currentX, targetTopY));
+                        // Esce dal TOP del blocco corrente, SALE alla BASE del blocco successivo
+                        waypoints.add(new mxPoint(currentX, currentTopY));
+                        waypoints.add(new mxPoint(currentX, targetBottomY));
 
                         mxGeometry edgeGeo = edgeCell.getGeometry();
                         if (edgeGeo != null) {
