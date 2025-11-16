@@ -531,101 +531,134 @@ public class FlowchartPanel extends JPanel {
             return;
         }
 
-        // ✓ Ci sono blocchi intermedi - configura la catena
-        if (target instanceof mxCell) {
-            mxCell targetCell = (mxCell) target;
-            mxGeometry targetGeo = targetCell.getGeometry();
+        // ✓ Ci sono blocchi intermedi - RIPOSIZIONALI SOPRA IL FOR
+        // Raccogli tutti i blocchi nella catena
+        java.util.List<Object> blockChain = new java.util.ArrayList<>();
+        Object current = target;
+        while (current != null && current != mergePoint) {
+            blockChain.add(current);
+            Object[] outEdges = graph.getOutgoingEdges(current);
+            if (outEdges == null || outEdges.length == 0) break;
 
-            if (targetGeo != null) {
-                // Riposiziona il primo blocco sulla linea laterale
-                double newBlockX = lateralLineX - (targetGeo.getWidth() / 2);
-                targetGeo.setX(newBlockX);
-                graph.getModel().setGeometry(target, targetGeo);
-
-                double targetBottomY = targetGeo.getY() + targetGeo.getHeight();  // ✓ BASE del blocco
-
-                // ✓ Waypoints dall'FOR al primo blocco: esce a destra, SALE alla BASE del blocco
-                java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                waypoints.add(new mxPoint(lateralLineX, forY));  // Esce dal lato destro
-                waypoints.add(new mxPoint(lateralLineX, targetBottomY));  // SALE alla base del blocco
-
-                mxGeometry edgeGeo = edgeCell.getGeometry();
-                if (edgeGeo != null) {
-                    edgeGeo = (mxGeometry) edgeGeo.clone();
-                    edgeGeo.setPoints(waypoints);
-                    graph.getModel().setGeometry(trueBranchEdge, edgeGeo);
+            current = null;
+            for (Object edge : outEdges) {
+                if (edge instanceof mxCell) {
+                    current = ((mxCell) edge).getTarget();
+                    break;
                 }
-
-                // Continua ricorsivamente con i blocchi successivi
-                configureForLoopBlockChainRecursive(target, lateralLineX, mergeX, mergeY, mergePoint);
             }
         }
+
+        if (blockChain.isEmpty()) return;
+
+        // Calcola lo spazio verticale disponibile tra merge point e FOR
+        mxCell forCell = null;
+        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
+        for (Object v : vertices) {
+            if (v instanceof mxCell) {
+                mxCell cell = (mxCell) v;
+                if (FOR_LOOP.equals(cell.getStyle())) {
+                    forCell = cell;
+                    break;
+                }
+            }
+        }
+
+        if (forCell == null) return;
+        mxGeometry forGeo = forCell.getGeometry();
+        double forTopY = forGeo.getY();
+
+        // Distribui i blocchi verticalmente tra merge e FOR
+        int numBlocks = blockChain.size();
+        double totalHeight = 0;
+        for (Object block : blockChain) {
+            mxCell blockCell = (mxCell) block;
+            mxGeometry blockGeo = blockCell.getGeometry();
+            if (blockGeo != null) totalHeight += blockGeo.getHeight();
+        }
+
+        double spacing = 40.0;
+        double totalSpace = (numBlocks - 1) * spacing + totalHeight;
+        double startY = forTopY - totalSpace - 20;  // 20 pixel sopra il FOR
+
+        // Riposiziona ogni blocco
+        double currentY = startY;
+        for (Object block : blockChain) {
+            mxCell blockCell = (mxCell) block;
+            mxGeometry blockGeo = blockCell.getGeometry();
+            if (blockGeo != null) {
+                // Posiziona sulla linea laterale, con Y crescente verso il FOR
+                double newBlockX = lateralLineX - (blockGeo.getWidth() / 2);
+                blockGeo.setX(newBlockX);
+                blockGeo.setY(currentY);
+                graph.getModel().setGeometry(block, blockGeo);
+
+                currentY += blockGeo.getHeight() + spacing;
+            }
+        }
+
+        // Ora configura i waypoints
+        configureForLoopTrueBranchWaypoints(trueBranchEdge, blockChain, forY, lateralLineX, mergeX, mergeY, mergePoint);
     }
 
     /**
-     * Configura ricorsivamente i blocchi intermedi nel ramo SI del FOR
+     * Configura waypoints per il ramo SI del FOR con blocchi riposizionati
      */
-    private void configureForLoopBlockChainRecursive(Object currentBlock, double lateralLineX,
+    private void configureForLoopTrueBranchWaypoints(Object firstEdge, java.util.List<Object> blockChain,
+                                                      double forY, double lateralLineX,
                                                       double mergeX, double mergeY, Object mergePoint) {
-        if (currentBlock == null || !(currentBlock instanceof mxCell)) return;
+        if (blockChain.isEmpty()) return;
 
-        mxCell currentCell = (mxCell) currentBlock;
-        mxGeometry currentGeo = currentCell.getGeometry();
-        if (currentGeo == null) return;
+        // Prima edge: FOR → primo blocco
+        mxCell firstEdgeCell = (mxCell) firstEdge;
+        Object firstBlock = blockChain.get(0);
+        mxCell firstBlockCell = (mxCell) firstBlock;
+        mxGeometry firstGeo = firstBlockCell.getGeometry();
 
-        double currentX = currentGeo.getCenterX();  // Centro X (già su lateralLineX)
-        double currentTopY = currentGeo.getY();  // ✓ TOP del blocco (da dove esce la freccia)
+        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+        waypoints.add(new mxPoint(lateralLineX, forY));
+        waypoints.add(new mxPoint(lateralLineX, firstGeo.getY() + firstGeo.getHeight()));
 
-        Object[] outEdges = graph.getOutgoingEdges(currentBlock);
-        if (outEdges == null || outEdges.length == 0) return;
+        mxGeometry edgeGeo = firstEdgeCell.getGeometry();
+        if (edgeGeo != null) {
+            edgeGeo = (mxGeometry) edgeGeo.clone();
+            edgeGeo.setPoints(waypoints);
+            graph.getModel().setGeometry(firstEdge, edgeGeo);
+        }
 
-        for (Object outEdge : outEdges) {
-            if (outEdge instanceof mxCell) {
-                mxCell edgeCell = (mxCell) outEdge;
-                Object target = edgeCell.getTarget();
+        // Edge tra blocchi
+        for (int i = 0; i < blockChain.size(); i++) {
+            mxCell currentBlock = (mxCell) blockChain.get(i);
+            mxGeometry currentGeo = currentBlock.getGeometry();
+            double currentX = currentGeo.getCenterX();
+            double currentTopY = currentGeo.getY();
 
-                if (target == mergePoint) {
-                    // ✓ Ultimo edge che torna al merge point
-                    java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                    // Esce dal TOP del blocco, SALE dritto fino all'altezza del merge
-                    waypoints.add(new mxPoint(currentX, currentTopY));
-                    waypoints.add(new mxPoint(currentX, mergeY));
-                    // Rientra orizzontalmente a SINISTRA verso il merge
-                    waypoints.add(new mxPoint(mergeX, mergeY));
+            Object[] outEdges = graph.getOutgoingEdges(currentBlock);
+            if (outEdges != null && outEdges.length > 0) {
+                for (Object outEdge : outEdges) {
+                    mxCell outEdgeCell = (mxCell) outEdge;
+                    Object nextTarget = outEdgeCell.getTarget();
 
-                    mxGeometry edgeGeo = edgeCell.getGeometry();
-                    if (edgeGeo != null) {
-                        edgeGeo = (mxGeometry) edgeGeo.clone();
-                        edgeGeo.setPoints(waypoints);
-                        graph.getModel().setGeometry(outEdge, edgeGeo);
+                    waypoints = new java.util.ArrayList<>();
+
+                    if (nextTarget == mergePoint) {
+                        // Ultimo blocco → merge
+                        waypoints.add(new mxPoint(currentX, currentTopY));
+                        waypoints.add(new mxPoint(currentX, mergeY));
+                        waypoints.add(new mxPoint(mergeX, mergeY));
+                    } else if (i < blockChain.size() - 1) {
+                        // Blocco → prossimo blocco
+                        mxCell nextBlock = (mxCell) blockChain.get(i + 1);
+                        mxGeometry nextGeo = nextBlock.getGeometry();
+                        waypoints.add(new mxPoint(currentX, currentTopY));
+                        waypoints.add(new mxPoint(currentX, nextGeo.getY() + nextGeo.getHeight()));
                     }
 
-                } else if (target instanceof mxCell) {
-                    // ✓ Blocco intermedio: riposizionalo sulla linea laterale e SALI dritto
-                    mxCell targetCell = (mxCell) target;
-                    mxGeometry targetGeo = targetCell.getGeometry();
-
-                    if (targetGeo != null) {
-                        double newTargetX = lateralLineX - (targetGeo.getWidth() / 2);
-                        targetGeo.setX(newTargetX);
-                        graph.getModel().setGeometry(target, targetGeo);
-
-                        double targetBottomY = targetGeo.getY() + targetGeo.getHeight();  // ✓ BASE del prossimo blocco
-
-                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                        // Esce dal TOP del blocco corrente, SALE alla BASE del blocco successivo
-                        waypoints.add(new mxPoint(currentX, currentTopY));
-                        waypoints.add(new mxPoint(currentX, targetBottomY));
-
-                        mxGeometry edgeGeo = edgeCell.getGeometry();
-                        if (edgeGeo != null) {
-                            edgeGeo = (mxGeometry) edgeGeo.clone();
-                            edgeGeo.setPoints(waypoints);
-                            graph.getModel().setGeometry(outEdge, edgeGeo);
-                        }
-
-                        // Continua ricorsivamente
-                        configureForLoopBlockChainRecursive(target, lateralLineX, mergeX, mergeY, mergePoint);
+                    mxGeometry outGeo = outEdgeCell.getGeometry();
+                    if (outGeo != null && !waypoints.isEmpty()) {
+                        outGeo = (mxGeometry) outGeo.clone();
+                        outGeo.setPoints(waypoints);
+                        graph.getModel().setGeometry(outEdge, outGeo);
                     }
                 }
             }
