@@ -504,7 +504,7 @@ public class FlowchartPanel extends JPanel {
     }
 
     /**
-     * Configura la catena di blocchi nel ramo TRUE_BRANCH del FOR con arco che torna indietro
+     * Configura waypoints per il ramo TRUE_BRANCH del FOR (blocchi già posizionati)
      */
     private void configureForLoopTrueBranchChain(Object trueBranchEdge, double forX, double forY,
                                                   double forRightX, double lateralLineX,
@@ -516,7 +516,6 @@ public class FlowchartPanel extends JPanel {
 
         // Se il target è direttamente il merge point (nessun blocco intermedio)
         if (target == mergePoint) {
-            // Arco SI: esce da destra, va a destra, torna indietro a sinistra
             java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
             waypoints.add(new mxPoint(lateralLineX, forY));
             waypoints.add(new mxPoint(lateralLineX, mergeY));
@@ -531,8 +530,7 @@ public class FlowchartPanel extends JPanel {
             return;
         }
 
-        // ✓ Ci sono blocchi intermedi - RIPOSIZIONALI SOPRA IL FOR
-        // Raccogli tutti i blocchi nella catena
+        // Ci sono blocchi intermedi - raccoglili
         java.util.List<Object> blockChain = new java.util.ArrayList<>();
         Object current = target;
         while (current != null && current != mergePoint) {
@@ -543,7 +541,10 @@ public class FlowchartPanel extends JPanel {
             current = null;
             for (Object edge : outEdges) {
                 if (edge instanceof mxCell) {
-                    current = ((mxCell) edge).getTarget();
+                    Object nextTarget = ((mxCell) edge).getTarget();
+                    if (nextTarget != mergePoint) {
+                        current = nextTarget;
+                    }
                     break;
                 }
             }
@@ -551,79 +552,22 @@ public class FlowchartPanel extends JPanel {
 
         if (blockChain.isEmpty()) return;
 
-        // Calcola lo spazio verticale disponibile tra merge point e FOR
-        mxCell forCell = null;
-        Object[] vertices = graph.getChildVertices(graph.getDefaultParent());
-        for (Object v : vertices) {
-            if (v instanceof mxCell) {
-                mxCell cell = (mxCell) v;
-                if (FOR_LOOP.equals(cell.getStyle())) {
-                    forCell = cell;
-                    break;
-                }
-            }
-        }
-
-        if (forCell == null) return;
-        mxGeometry forGeo = forCell.getGeometry();
-        double forTopY = forGeo.getY();
-
-        // Distribui i blocchi verticalmente tra merge e FOR
-        int numBlocks = blockChain.size();
-        double totalHeight = 0;
-        for (Object block : blockChain) {
-            mxCell blockCell = (mxCell) block;
-            mxGeometry blockGeo = blockCell.getGeometry();
-            if (blockGeo != null) totalHeight += blockGeo.getHeight();
-        }
-
-        double spacing = 40.0;
-        double totalSpace = (numBlocks - 1) * spacing + totalHeight;
-        double startY = forTopY - totalSpace - 20;  // 20 pixel sopra il FOR
-
-        // Riposiziona ogni blocco
-        double currentY = startY;
-        for (Object block : blockChain) {
-            mxCell blockCell = (mxCell) block;
-            mxGeometry blockGeo = blockCell.getGeometry();
-            if (blockGeo != null) {
-                // Posiziona sulla linea laterale, con Y crescente verso il FOR
-                double newBlockX = lateralLineX - (blockGeo.getWidth() / 2);
-                blockGeo.setX(newBlockX);
-                blockGeo.setY(currentY);
-                graph.getModel().setGeometry(block, blockGeo);
-
-                currentY += blockGeo.getHeight() + spacing;
-            }
-        }
-
-        // Ora configura i waypoints
-        configureForLoopTrueBranchWaypoints(trueBranchEdge, blockChain, forY, lateralLineX, mergeX, mergeY, mergePoint);
-    }
-
-    /**
-     * Configura waypoints per il ramo SI del FOR con blocchi riposizionati
-     */
-    private void configureForLoopTrueBranchWaypoints(Object firstEdge, java.util.List<Object> blockChain,
-                                                      double forY, double lateralLineX,
-                                                      double mergeX, double mergeY, Object mergePoint) {
-        if (blockChain.isEmpty()) return;
+        // ✓ I blocchi sono già stati posizionati da positionForLoopTrueBranchBlocks()
+        // Ora configura solo i waypoints
 
         // Prima edge: FOR → primo blocco
-        mxCell firstEdgeCell = (mxCell) firstEdge;
-        Object firstBlock = blockChain.get(0);
-        mxCell firstBlockCell = (mxCell) firstBlock;
-        mxGeometry firstGeo = firstBlockCell.getGeometry();
+        mxCell firstBlock = (mxCell) blockChain.get(0);
+        mxGeometry firstGeo = firstBlock.getGeometry();
 
         java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
         waypoints.add(new mxPoint(lateralLineX, forY));
         waypoints.add(new mxPoint(lateralLineX, firstGeo.getY() + firstGeo.getHeight()));
 
-        mxGeometry edgeGeo = firstEdgeCell.getGeometry();
+        mxGeometry edgeGeo = edgeCell.getGeometry();
         if (edgeGeo != null) {
             edgeGeo = (mxGeometry) edgeGeo.clone();
             edgeGeo.setPoints(waypoints);
-            graph.getModel().setGeometry(firstEdge, edgeGeo);
+            graph.getModel().setGeometry(trueBranchEdge, edgeGeo);
         }
 
         // Edge tra blocchi
@@ -864,21 +808,148 @@ public class FlowchartPanel extends JPanel {
     }
 
     /**
+     * Raccoglie tutti i blocchi nel ramo TRUE_BRANCH di un FOR loop
+     */
+    private java.util.List<Object> collectForLoopTrueBranchBlocks(Object forLoop) {
+        java.util.List<Object> blocks = new java.util.ArrayList<>();
+
+        Object[] edges = graph.getOutgoingEdges(forLoop);
+        Object mergePoint = null;
+
+        // Trova il merge point (target del TRUE_BRANCH)
+        for (Object edge : edges) {
+            if (edge instanceof mxCell) {
+                mxCell edgeCell = (mxCell) edge;
+                if ("TRUE_BRANCH".equals(edgeCell.getStyle())) {
+                    Object target = edgeCell.getTarget();
+                    // Il target diretto è il primo blocco o il merge point
+                    if (target instanceof mxCell) {
+                        String targetStyle = ((mxCell) target).getStyle();
+                        if (MERGE.equals(targetStyle)) {
+                            mergePoint = target;
+                        } else {
+                            // Raccogli tutti i blocchi fino al merge point
+                            Object current = target;
+                            while (current != null && current != mergePoint) {
+                                if (!MERGE.equals(((mxCell) current).getStyle())) {
+                                    blocks.add(current);
+                                }
+
+                                Object[] outEdges = graph.getOutgoingEdges(current);
+                                current = null;
+                                if (outEdges != null && outEdges.length > 0) {
+                                    for (Object outEdge : outEdges) {
+                                        if (outEdge instanceof mxCell) {
+                                            current = ((mxCell) outEdge).getTarget();
+                                            if (current instanceof mxCell && MERGE.equals(((mxCell) current).getStyle())) {
+                                                current = null;  // Fermati al merge point
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        return blocks;
+    }
+
+    /**
+     * Posiziona manualmente i blocchi nel ramo TRUE_BRANCH di un FOR loop SOPRA il FOR
+     */
+    private void positionForLoopTrueBranchBlocks(Object forLoop, java.util.List<Object> blocks) {
+        if (blocks.isEmpty()) return;
+
+        mxCell forCell = (mxCell) forLoop;
+        mxGeometry forGeo = forCell.getGeometry();
+        if (forGeo == null) return;
+
+        double forTopY = forGeo.getY();
+        double forRightX = forGeo.getX() + forGeo.getWidth();
+        double lateralOffset = 120.0;
+        double lateralLineX = forRightX + lateralOffset;
+
+        // Calcola altezza totale
+        double totalHeight = 0;
+        for (Object block : blocks) {
+            mxGeometry geo = ((mxCell) block).getGeometry();
+            if (geo != null) totalHeight += geo.getHeight();
+        }
+
+        double spacing = 40.0;
+        double totalSpace = totalHeight + (blocks.size() - 1) * spacing;
+        double startY = forTopY - totalSpace - 20;
+
+        // Posiziona ogni blocco
+        double currentY = startY;
+        for (Object block : blocks) {
+            mxCell blockCell = (mxCell) block;
+            mxGeometry blockGeo = blockCell.getGeometry();
+            if (blockGeo != null) {
+                double newX = lateralLineX - (blockGeo.getWidth() / 2);
+                blockGeo.setX(newX);
+                blockGeo.setY(currentY);
+                graph.getModel().setGeometry(block, blockGeo);
+
+                currentY += blockGeo.getHeight() + spacing;
+            }
+        }
+    }
+
+    /**
      * Apply hierarchical layout to organize the flowchart
      */
     private void applyHierarchicalLayout() {
-        mxHierarchicalLayout layout = new mxHierarchicalLayout(graph);
-        layout.setInterHierarchySpacing(120);  // ✓ Spazio laterale maggiore per ramificazioni chiare
-        layout.setInterRankCellSpacing(60);    // ✓ Spazio verticale per linee dritte
-        layout.setIntraCellSpacing(80);        // ✓ Spazio tra celle allo stesso livello
-        layout.setOrientation(SwingConstants.NORTH);
-        layout.setDisableEdgeStyle(false);     // Rispetta gli stili ortogonali degli edge
-        layout.setParallelEdgeSpacing(50);     // ✓ Spazio tra edge paralleli
-
         Object parent = graph.getDefaultParent();
+
+        // ✓ STEP 1: Nascondi temporaneamente i blocchi nel ramo SI dei cicli FOR
+        java.util.Map<Object, java.util.List<Object>> forLoopBranches = new java.util.HashMap<>();
+        Object[] allVertices = graph.getChildVertices(parent);
+
+        for (Object vertex : allVertices) {
+            if (vertex instanceof mxCell) {
+                mxCell cell = (mxCell) vertex;
+                if (FOR_LOOP.equals(cell.getStyle())) {
+                    java.util.List<Object> branchBlocks = collectForLoopTrueBranchBlocks(vertex);
+                    if (!branchBlocks.isEmpty()) {
+                        forLoopBranches.put(vertex, branchBlocks);
+                        for (Object block : branchBlocks) {
+                            ((mxCell) block).setVisible(false);
+                        }
+                    }
+                }
+            }
+        }
+
+        mxHierarchicalLayout layout = new mxHierarchicalLayout(graph);
+        layout.setInterHierarchySpacing(120);
+        layout.setInterRankCellSpacing(60);
+        layout.setIntraCellSpacing(80);
+        layout.setOrientation(SwingConstants.NORTH);
+        layout.setDisableEdgeStyle(false);
+        layout.setParallelEdgeSpacing(50);
+
         graph.getModel().beginUpdate();
         try {
+            // ✓ STEP 2: Esegui layout (i blocchi nascosti non saranno posizionati dal layout)
             layout.execute(parent);
+
+            // ✓ STEP 3: Mostra e posiziona manualmente i blocchi nel ramo SI dei FOR
+            for (java.util.Map.Entry<Object, java.util.List<Object>> entry : forLoopBranches.entrySet()) {
+                Object forLoop = entry.getKey();
+                java.util.List<Object> blocks = entry.getValue();
+
+                for (Object block : blocks) {
+                    ((mxCell) block).setVisible(true);
+                }
+
+                positionForLoopTrueBranchBlocks(forLoop, blocks);
+            }
 
             // ✓ Configura waypoints per ramificazioni laterali nei condizionali
             configureConditionalBranchWaypoints();
