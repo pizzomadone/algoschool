@@ -393,8 +393,44 @@ public class FlowchartPanel extends JPanel {
 
                     double forX = forGeo.getCenterX();
                     double forY = forGeo.getCenterY();
+                    double forTopY = forGeo.getY();  // Lato superiore
                     double forRightX = forGeo.getX() + forGeo.getWidth();  // Lato destro
                     double forBottomY = forGeo.getY() + forGeo.getHeight();  // Base
+
+                    // ✓ IMPORTANTE: Configura l'edge ENTRANTE (merge point → FOR)
+                    Object[] incomingEdges = graph.getIncomingEdges(vertex);
+                    for (Object inEdge : incomingEdges) {
+                        if (inEdge instanceof mxCell) {
+                            mxCell inEdgeCell = (mxCell) inEdge;
+                            Object sourceCell = inEdgeCell.getSource();
+
+                            if (sourceCell instanceof mxCell) {
+                                mxCell source = (mxCell) sourceCell;
+                                String sourceStyle = source.getStyle();
+
+                                // Se la source è il merge point, configura waypoints
+                                if (MERGE.equals(sourceStyle)) {
+                                    mxGeometry sourceGeo = source.getGeometry();
+                                    if (sourceGeo != null) {
+                                        double sourceX = sourceGeo.getCenterX();
+                                        double sourceY = sourceGeo.getCenterY();
+
+                                        // Waypoints: scendi dritto al centro del lato superiore del FOR
+                                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+                                        waypoints.add(new mxPoint(forX, sourceY));
+                                        waypoints.add(new mxPoint(forX, forTopY));
+
+                                        mxGeometry edgeGeo = inEdgeCell.getGeometry();
+                                        if (edgeGeo != null) {
+                                            edgeGeo = (mxGeometry) edgeGeo.clone();
+                                            edgeGeo.setPoints(waypoints);
+                                            graph.getModel().setGeometry(inEdge, edgeGeo);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Trova gli archi TRUE_BRANCH e FALSE_BRANCH
                     Object[] edges = graph.getOutgoingEdges(vertex);
@@ -448,8 +484,6 @@ public class FlowchartPanel extends JPanel {
 
                                     } else if ("FALSE_BRANCH".equals(edgeStyle)) {
                                         // ✓ Arco NO: esce dal centro della base, scende dritto
-                                        // Nessun waypoint necessario, sarà dritto per default
-                                        // Oppure aggiungi waypoint per forzare uscita dal basso
                                         java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
                                         waypoints.add(new mxPoint(forX, forBottomY));
 
