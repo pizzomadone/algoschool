@@ -884,8 +884,9 @@ public class FlowchartPanel extends JPanel {
         double spacing = 40.0;
         double totalSpace = totalHeight + (blocks.size() - 1) * spacing;
 
-        // ✓ Spazio extra sopra i blocchi per il merge point
-        double mergeSpacing = 60.0;
+        // ✓ Spazio extra sopra i blocchi per permettere all'arco di salire e virare a sinistra
+        // L'arco deve: uscire dal top del blocco → salire → virare a sinistra → arrivare al merge
+        double mergeSpacing = 120.0;  // Spazio sufficiente per la risalita e virata
         double startY = forTopY - totalSpace - mergeSpacing;
 
         // Posiziona ogni blocco
