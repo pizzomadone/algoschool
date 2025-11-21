@@ -871,8 +871,28 @@ public class FlowchartPanel extends JPanel {
 
         double forTopY = forGeo.getY();
         double forRightX = forGeo.getX() + forGeo.getWidth();
+        double forCenterX = forGeo.getCenterX();
         double lateralOffset = 120.0;
         double lateralLineX = forRightX + lateralOffset;
+
+        // Trova il merge point PRIMA di tutto per sapere dove si trova dopo il layout
+        Object mergePoint = null;
+        mxGeometry mergeGeo = null;
+        Object[] edges = graph.getOutgoingEdges(forLoop);
+        for (Object edge : edges) {
+            if (edge instanceof mxCell) {
+                mxCell edgeCell = (mxCell) edge;
+                if ("TRUE_BRANCH".equals(edgeCell.getStyle())) {
+                    mergePoint = edgeCell.getTarget();
+                    if (mergePoint instanceof mxCell) {
+                        mergeGeo = ((mxCell) mergePoint).getGeometry();
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (mergeGeo == null) return;
 
         // Calcola altezza totale dei blocchi
         double totalHeight = 0;
@@ -882,13 +902,38 @@ public class FlowchartPanel extends JPanel {
         }
 
         double spacing = 40.0;
-        double totalSpace = totalHeight + (blocks.size() - 1) * spacing;
+        double totalBlocksSpace = totalHeight + (blocks.size() - 1) * spacing;
 
-        // ✓ Posiziona i blocchi sopra il FOR con margine ragionevole
-        double blockTopMargin = 80.0;  // Spazio tra FOR e primo blocco
-        double startY = forTopY - totalSpace - blockTopMargin;
+        // Margini necessari
+        double marginAboveBlocks = 60.0;   // Spazio tra merge e primo blocco (in alto)
+        double marginBelowBlocks = 80.0;   // Spazio tra ultimo blocco e FOR (in basso)
+        double totalSpaceNeeded = totalBlocksSpace + marginAboveBlocks + marginBelowBlocks;
 
-        // Posiziona ogni blocco
+        // Posizione attuale del merge point (dopo layout)
+        double currentMergeBottomY = mergeGeo.getY() + mergeGeo.getHeight();
+
+        // Spazio disponibile tra merge point e FOR
+        double availableSpace = forTopY - currentMergeBottomY;
+
+        // Se non c'è abbastanza spazio, sposta il merge point in alto per crearlo
+        double mergeY = mergeGeo.getY();
+        if (availableSpace < totalSpaceNeeded) {
+            double extraSpaceNeeded = totalSpaceNeeded - availableSpace;
+            mergeY = mergeGeo.getY() - extraSpaceNeeded;
+            mergeGeo.setY(mergeY);
+            mergeGeo.setX(forCenterX - (mergeGeo.getWidth() / 2));  // Centra rispetto al FOR
+            graph.getModel().setGeometry(mergePoint, mergeGeo);
+        } else {
+            // Centra comunque il merge point rispetto al FOR
+            mergeGeo.setX(forCenterX - (mergeGeo.getWidth() / 2));
+            graph.getModel().setGeometry(mergePoint, mergeGeo);
+        }
+
+        // Ora posiziona i blocchi: partono da sotto il merge point + margine
+        double mergeBottomY = mergeY + mergeGeo.getHeight();
+        double startY = mergeBottomY + marginAboveBlocks;
+
+        // Posiziona ogni blocco sulla linea laterale (a destra del FOR)
         double currentY = startY;
         for (Object block : blocks) {
             mxCell blockCell = (mxCell) block;
@@ -900,32 +945,6 @@ public class FlowchartPanel extends JPanel {
                 graph.getModel().setGeometry(block, blockGeo);
 
                 currentY += blockGeo.getHeight() + spacing;
-            }
-        }
-
-        // ✓ IMPORTANTE: Merge point POCO sopra il primo blocco
-        double mergeTopMargin = 60.0;  // Solo 60px sopra il primo blocco
-        Object[] edges = graph.getOutgoingEdges(forLoop);
-        for (Object edge : edges) {
-            if (edge instanceof mxCell) {
-                mxCell edgeCell = (mxCell) edge;
-                if ("TRUE_BRANCH".equals(edgeCell.getStyle())) {
-                    Object mergePoint = edgeCell.getTarget();
-                    if (mergePoint instanceof mxCell) {
-                        mxCell mergeCell = (mxCell) mergePoint;
-                        mxGeometry mergeGeo = mergeCell.getGeometry();
-                        if (mergeGeo != null) {
-                            double forCenterX = forGeo.getCenterX();
-                            double newMergeX = forCenterX - (mergeGeo.getWidth() / 2);
-                            double newMergeY = startY - mergeTopMargin;  // POCO sopra il primo blocco
-
-                            mergeGeo.setX(newMergeX);
-                            mergeGeo.setY(newMergeY);
-                            graph.getModel().setGeometry(mergePoint, mergeGeo);
-                        }
-                    }
-                    break;
-                }
             }
         }
     }
