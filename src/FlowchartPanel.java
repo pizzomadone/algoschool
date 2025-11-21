@@ -869,13 +869,11 @@ public class FlowchartPanel extends JPanel {
         mxGeometry forGeo = forCell.getGeometry();
         if (forGeo == null) return;
 
-        double forTopY = forGeo.getY();
-        double forRightX = forGeo.getX() + forGeo.getWidth();
         double forCenterX = forGeo.getCenterX();
         double lateralOffset = 120.0;
-        double lateralLineX = forRightX + lateralOffset;
+        double lateralLineX = forGeo.getX() + forGeo.getWidth() + lateralOffset;
 
-        // Trova il merge point PRIMA di tutto per sapere dove si trova dopo il layout
+        // Trova il merge point per sapere dove si trova dopo il layout
         Object mergePoint = null;
         mxGeometry mergeGeo = null;
         Object[] edges = graph.getOutgoingEdges(forLoop);
@@ -905,35 +903,41 @@ public class FlowchartPanel extends JPanel {
         double totalBlocksSpace = totalHeight + (blocks.size() - 1) * spacing;
 
         // Margini necessari
-        double marginAboveBlocks = 60.0;   // Spazio tra merge e primo blocco (in alto)
-        double marginBelowBlocks = 80.0;   // Spazio tra ultimo blocco e FOR (in basso)
+        double marginAboveBlocks = 60.0;   // Spazio tra merge e primo blocco
+        double marginBelowBlocks = 80.0;   // Spazio tra ultimo blocco e FOR
         double totalSpaceNeeded = totalBlocksSpace + marginAboveBlocks + marginBelowBlocks;
 
-        // Posizione attuale del merge point (dopo layout)
-        double currentMergeBottomY = mergeGeo.getY() + mergeGeo.getHeight();
+        // Posizione attuale del merge point (dopo layout) - IL MERGE RESTA DOV'È
+        double mergeBottomY = mergeGeo.getY() + mergeGeo.getHeight();
 
         // Spazio disponibile tra merge point e FOR
-        double availableSpace = forTopY - currentMergeBottomY;
+        double availableSpace = forGeo.getY() - mergeBottomY;
 
-        // Se non c'è abbastanza spazio, sposta il merge point in alto per crearlo
-        double mergeY = mergeGeo.getY();
+        // Se non c'è abbastanza spazio, sposta il FOR (e tutto sotto) verso il BASSO
         if (availableSpace < totalSpaceNeeded) {
             double extraSpaceNeeded = totalSpaceNeeded - availableSpace;
-            mergeY = mergeGeo.getY() - extraSpaceNeeded;
-            mergeGeo.setY(mergeY);
-            mergeGeo.setX(forCenterX - (mergeGeo.getWidth() / 2));  // Centra rispetto al FOR
-            graph.getModel().setGeometry(mergePoint, mergeGeo);
-        } else {
-            // Centra comunque il merge point rispetto al FOR
-            mergeGeo.setX(forCenterX - (mergeGeo.getWidth() / 2));
-            graph.getModel().setGeometry(mergePoint, mergeGeo);
+
+            // Sposta il FOR verso il basso
+            double newForY = forGeo.getY() + extraSpaceNeeded;
+            forGeo.setY(newForY);
+            graph.getModel().setGeometry(forLoop, forGeo);
+
+            // Sposta anche tutti i nodi che sono SOTTO il FOR (collegati tramite FALSE_BRANCH)
+            shiftNodesBelow(forLoop, extraSpaceNeeded);
         }
 
-        // Ora posiziona i blocchi: partono da sotto il merge point + margine
-        double mergeBottomY = mergeY + mergeGeo.getHeight();
+        // Centra il merge point rispetto al FOR (solo X, non Y)
+        double newForCenterX = forGeo.getCenterX();
+        mergeGeo.setX(newForCenterX - (mergeGeo.getWidth() / 2));
+        graph.getModel().setGeometry(mergePoint, mergeGeo);
+
+        // Posiziona i blocchi: partono da sotto il merge point + margine
         double startY = mergeBottomY + marginAboveBlocks;
 
         // Posiziona ogni blocco sulla linea laterale (a destra del FOR)
+        // Ricalcola lateralLineX con la nuova posizione del FOR
+        lateralLineX = forGeo.getX() + forGeo.getWidth() + lateralOffset;
+
         double currentY = startY;
         for (Object block : blocks) {
             mxCell blockCell = (mxCell) block;
@@ -945,6 +949,44 @@ public class FlowchartPanel extends JPanel {
                 graph.getModel().setGeometry(block, blockGeo);
 
                 currentY += blockGeo.getHeight() + spacing;
+            }
+        }
+    }
+
+    /**
+     * Sposta verso il basso tutti i nodi collegati (ricorsivamente) a partire da un nodo
+     */
+    private void shiftNodesBelow(Object startNode, double shiftAmount) {
+        java.util.Set<Object> visited = new java.util.HashSet<>();
+        shiftNodesBelowRecursive(startNode, shiftAmount, visited);
+    }
+
+    private void shiftNodesBelowRecursive(Object node, double shiftAmount, java.util.Set<Object> visited) {
+        if (visited.contains(node)) return;
+        visited.add(node);
+
+        Object[] outEdges = graph.getOutgoingEdges(node);
+        if (outEdges == null) return;
+
+        for (Object edge : outEdges) {
+            if (edge instanceof mxCell) {
+                mxCell edgeCell = (mxCell) edge;
+                String style = edgeCell.getStyle();
+
+                // Salta TRUE_BRANCH del FOR (quelli tornano indietro, non vanno in basso)
+                if ("TRUE_BRANCH".equals(style)) continue;
+
+                Object target = edgeCell.getTarget();
+                if (target instanceof mxCell && !visited.contains(target)) {
+                    mxCell targetCell = (mxCell) target;
+                    mxGeometry targetGeo = targetCell.getGeometry();
+                    if (targetGeo != null) {
+                        targetGeo.setY(targetGeo.getY() + shiftAmount);
+                        graph.getModel().setGeometry(target, targetGeo);
+                    }
+                    // Continua ricorsivamente
+                    shiftNodesBelowRecursive(target, shiftAmount, visited);
+                }
             }
         }
     }
