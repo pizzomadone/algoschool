@@ -395,7 +395,9 @@ public class FlowchartPanel extends JPanel {
                     double forY = forGeo.getCenterY();
                     double forTopY = forGeo.getY();  // Lato superiore
                     double forRightX = forGeo.getX() + forGeo.getWidth();  // Lato destro
+                    double forLeftX = forGeo.getX();  // Lato sinistro
                     double forBottomY = forGeo.getY() + forGeo.getHeight();  // Base
+                    double forWidth = forGeo.getWidth();
 
                     // ✓ IMPORTANTE: Configura l'edge ENTRANTE (merge point → FOR)
                     Object[] incomingEdges = graph.getIncomingEdges(vertex);
@@ -473,25 +475,43 @@ public class FlowchartPanel extends JPanel {
 
                             if (trueBranchEdge != null) {
                                 // Configura la catena di blocchi nel ramo SI
-                                configureForLoopTrueBranchChain(trueBranchEdge, forX, forY, forRightX,
+                                configureForLoopTrueBranchChain(trueBranchEdge, forX, forY, forBottomY,
                                     lateralLineX, mergeX, mergeY, mergePoint);
                             }
 
-                            // ✓ Arco NO: esce dal centro della base, scende dritto
+                            // ✓ Arco NO: esce dal vertice sinistro, si allarga a sinistra, scende, rientra
                             for (Object edge : edges) {
                                 if (edge instanceof mxCell) {
                                     mxCell edgeCell = (mxCell) edge;
                                     String edgeStyle = edgeCell.getStyle();
 
                                     if ("FALSE_BRANCH".equals(edgeStyle)) {
-                                        java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-                                        waypoints.add(new mxPoint(forX, forBottomY));
+                                        Object target = edgeCell.getTarget();
+                                        if (target instanceof mxCell) {
+                                            mxCell targetCell = (mxCell) target;
+                                            mxGeometry targetGeo = targetCell.getGeometry();
+                                            if (targetGeo != null) {
+                                                double lateralOffsetNO = 120.0;  // Distanza a sinistra
+                                                double lateralLineXNO = forLeftX - lateralOffsetNO;
+                                                double targetY = targetGeo.getCenterY();
 
-                                        mxGeometry edgeGeo = edgeCell.getGeometry();
-                                        if (edgeGeo != null) {
-                                            edgeGeo = (mxGeometry) edgeGeo.clone();
-                                            edgeGeo.setPoints(waypoints);
-                                            graph.getModel().setGeometry(edge, edgeGeo);
+                                                java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+                                                // Esce dal vertice sinistro
+                                                waypoints.add(new mxPoint(forLeftX, forY));
+                                                // Si allarga a sinistra
+                                                waypoints.add(new mxPoint(lateralLineXNO, forY));
+                                                // Scende (scansando i blocchi SI)
+                                                waypoints.add(new mxPoint(lateralLineXNO, targetY));
+                                                // Rientra a destra verso il target
+                                                waypoints.add(new mxPoint(targetGeo.getCenterX(), targetY));
+
+                                                mxGeometry edgeGeo = edgeCell.getGeometry();
+                                                if (edgeGeo != null) {
+                                                    edgeGeo = (mxGeometry) edgeGeo.clone();
+                                                    edgeGeo.setPoints(waypoints);
+                                                    graph.getModel().setGeometry(edge, edgeGeo);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -505,9 +525,10 @@ public class FlowchartPanel extends JPanel {
 
     /**
      * Configura waypoints per il ramo TRUE_BRANCH del FOR (blocchi già posizionati)
+     * Arco SI: esce dal centro della base, scende, risale al merge
      */
     private void configureForLoopTrueBranchChain(Object trueBranchEdge, double forX, double forY,
-                                                  double forRightX, double lateralLineX,
+                                                  double forBottomY, double lateralLineX,
                                                   double mergeX, double mergeY, Object mergePoint) {
         if (!(trueBranchEdge instanceof mxCell)) return;
 
@@ -516,8 +537,12 @@ public class FlowchartPanel extends JPanel {
 
         // Se il target è direttamente il merge point (nessun blocco intermedio)
         if (target == mergePoint) {
+            // Dalla base del FOR, scende un po', poi sale verticalmente e rientra al merge
             java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-            waypoints.add(new mxPoint(lateralLineX, forY));
+            double descentAmount = 60.0;  // Quanto scende prima di risalire
+            waypoints.add(new mxPoint(forX, forBottomY));
+            waypoints.add(new mxPoint(forX, forBottomY + descentAmount));
+            waypoints.add(new mxPoint(lateralLineX, forBottomY + descentAmount));
             waypoints.add(new mxPoint(lateralLineX, mergeY));
             waypoints.add(new mxPoint(mergeX, mergeY));
 
@@ -555,13 +580,15 @@ public class FlowchartPanel extends JPanel {
         // ✓ I blocchi sono già stati posizionati da positionForLoopTrueBranchBlocks()
         // Ora configura solo i waypoints
 
-        // Prima edge: FOR → primo blocco
+        // Prima edge: FOR → primo blocco (dalla base del FOR, scende verticalmente)
         mxCell firstBlock = (mxCell) blockChain.get(0);
         mxGeometry firstGeo = firstBlock.getGeometry();
 
         java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
-        waypoints.add(new mxPoint(lateralLineX, forY));
-        waypoints.add(new mxPoint(lateralLineX, firstGeo.getY() + firstGeo.getHeight()));
+        // Esce dal centro della base del FOR
+        waypoints.add(new mxPoint(forX, forBottomY));
+        // Scende dritto al primo blocco
+        waypoints.add(new mxPoint(forX, firstGeo.getY()));
 
         mxGeometry edgeGeo = edgeCell.getGeometry();
         if (edgeGeo != null) {
@@ -586,16 +613,20 @@ public class FlowchartPanel extends JPanel {
                     waypoints = new java.util.ArrayList<>();
 
                     if (nextTarget == mergePoint) {
-                        // Ultimo blocco → merge
-                        waypoints.add(new mxPoint(currentX, currentTopY));
-                        waypoints.add(new mxPoint(currentX, mergeY));
+                        // Ultimo blocco → merge: scende, vira a destra, risale, rientra al merge
+                        double currentBottomY = currentGeo.getY() + currentGeo.getHeight();
+                        waypoints.add(new mxPoint(currentX, currentBottomY));
+                        waypoints.add(new mxPoint(currentX, currentBottomY + 40));
+                        waypoints.add(new mxPoint(lateralLineX, currentBottomY + 40));
+                        waypoints.add(new mxPoint(lateralLineX, mergeY));
                         waypoints.add(new mxPoint(mergeX, mergeY));
                     } else if (i < blockChain.size() - 1) {
-                        // Blocco → prossimo blocco
+                        // Blocco → prossimo blocco: scende dritto verticalmente
                         mxCell nextBlock = (mxCell) blockChain.get(i + 1);
                         mxGeometry nextGeo = nextBlock.getGeometry();
-                        waypoints.add(new mxPoint(currentX, currentTopY));
-                        waypoints.add(new mxPoint(currentX, nextGeo.getY() + nextGeo.getHeight()));
+                        double currentBottomY = currentGeo.getY() + currentGeo.getHeight();
+                        waypoints.add(new mxPoint(currentX, currentBottomY));
+                        waypoints.add(new mxPoint(currentX, nextGeo.getY()));
                     }
 
                     mxGeometry outGeo = outEdgeCell.getGeometry();
@@ -860,7 +891,8 @@ public class FlowchartPanel extends JPanel {
     }
 
     /**
-     * Posiziona manualmente i blocchi nel ramo TRUE_BRANCH di un FOR loop SOPRA il FOR
+     * Posiziona manualmente i blocchi nel ramo TRUE_BRANCH di un FOR loop SOTTO il FOR
+     * I blocchi sono allineati verticalmente al centro del FOR
      */
     private void positionForLoopTrueBranchBlocks(Object forLoop, java.util.List<Object> blocks) {
         if (blocks.isEmpty()) return;
@@ -870,80 +902,19 @@ public class FlowchartPanel extends JPanel {
         if (forGeo == null) return;
 
         double forCenterX = forGeo.getCenterX();
-        double lateralOffset = 120.0;
-        double lateralLineX = forGeo.getX() + forGeo.getWidth() + lateralOffset;
-
-        // Trova il merge point per sapere dove si trova dopo il layout
-        Object mergePoint = null;
-        mxGeometry mergeGeo = null;
-        Object[] edges = graph.getOutgoingEdges(forLoop);
-        for (Object edge : edges) {
-            if (edge instanceof mxCell) {
-                mxCell edgeCell = (mxCell) edge;
-                if ("TRUE_BRANCH".equals(edgeCell.getStyle())) {
-                    mergePoint = edgeCell.getTarget();
-                    if (mergePoint instanceof mxCell) {
-                        mergeGeo = ((mxCell) mergePoint).getGeometry();
-                    }
-                    break;
-                }
-            }
-        }
-
-        if (mergeGeo == null) return;
-
-        // Calcola altezza totale dei blocchi
-        double totalHeight = 0;
-        for (Object block : blocks) {
-            mxGeometry geo = ((mxCell) block).getGeometry();
-            if (geo != null) totalHeight += geo.getHeight();
-        }
-
+        double forBottomY = forGeo.getY() + forGeo.getHeight();
         double spacing = 40.0;
-        double totalBlocksSpace = totalHeight + (blocks.size() - 1) * spacing;
 
-        // Margini necessari
-        double marginAboveBlocks = 60.0;   // Spazio tra merge e primo blocco
-        double marginBelowBlocks = 80.0;   // Spazio tra ultimo blocco e FOR
-        double totalSpaceNeeded = totalBlocksSpace + marginAboveBlocks + marginBelowBlocks;
-
-        // Posizione attuale del merge point (dopo layout) - IL MERGE RESTA DOV'È
-        double mergeBottomY = mergeGeo.getY() + mergeGeo.getHeight();
-
-        // Spazio disponibile tra merge point e FOR
-        double availableSpace = forGeo.getY() - mergeBottomY;
-
-        // Se non c'è abbastanza spazio, sposta il FOR (e tutto sotto) verso il BASSO
-        if (availableSpace < totalSpaceNeeded) {
-            double extraSpaceNeeded = totalSpaceNeeded - availableSpace;
-
-            // Sposta il FOR verso il basso
-            double newForY = forGeo.getY() + extraSpaceNeeded;
-            forGeo.setY(newForY);
-            graph.getModel().setGeometry(forLoop, forGeo);
-
-            // Sposta anche tutti i nodi che sono SOTTO il FOR (collegati tramite FALSE_BRANCH)
-            shiftNodesBelow(forLoop, extraSpaceNeeded);
-        }
-
-        // Centra il merge point rispetto al FOR (solo X, non Y)
-        double newForCenterX = forGeo.getCenterX();
-        mergeGeo.setX(newForCenterX - (mergeGeo.getWidth() / 2));
-        graph.getModel().setGeometry(mergePoint, mergeGeo);
-
-        // Posiziona i blocchi: partono da sotto il merge point + margine
-        double startY = mergeBottomY + marginAboveBlocks;
-
-        // Posiziona ogni blocco sulla linea laterale (a destra del FOR)
-        // Ricalcola lateralLineX con la nuova posizione del FOR
-        lateralLineX = forGeo.getX() + forGeo.getWidth() + lateralOffset;
+        // Posiziona i blocchi SOTTO il FOR, verticalmente allineati al centro
+        double startY = forBottomY + spacing;
 
         double currentY = startY;
         for (Object block : blocks) {
             mxCell blockCell = (mxCell) block;
             mxGeometry blockGeo = blockCell.getGeometry();
             if (blockGeo != null) {
-                double newX = lateralLineX - (blockGeo.getWidth() / 2);
+                // Centra il blocco rispetto al FOR (allineamento verticale)
+                double newX = forCenterX - (blockGeo.getWidth() / 2);
                 blockGeo.setX(newX);
                 blockGeo.setY(currentY);
                 graph.getModel().setGeometry(block, blockGeo);
