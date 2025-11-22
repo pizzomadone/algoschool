@@ -495,14 +495,19 @@ public class FlowchartPanel extends JPanel {
                                                 double lateralLineXNO = forLeftX - lateralOffsetNO;
                                                 double targetY = targetGeo.getCenterY();
 
+                                                // Punto di rientro: sotto il FOR di un po'
+                                                double reentryY = forBottomY + 60.0;
+
                                                 java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
                                                 // Esce dal vertice sinistro
                                                 waypoints.add(new mxPoint(forLeftX, forY));
                                                 // Si allarga a sinistra
                                                 waypoints.add(new mxPoint(lateralLineXNO, forY));
-                                                // Scende (scansando i blocchi SI)
-                                                waypoints.add(new mxPoint(lateralLineXNO, targetY));
-                                                // Rientra a destra verso il target
+                                                // Scende lateralmente (scansando i blocchi SI)
+                                                waypoints.add(new mxPoint(lateralLineXNO, reentryY));
+                                                // Rientra a destra
+                                                waypoints.add(new mxPoint(targetGeo.getCenterX(), reentryY));
+                                                // Scende verso il target
                                                 waypoints.add(new mxPoint(targetGeo.getCenterX(), targetY));
 
                                                 mxGeometry edgeGeo = edgeCell.getGeometry();
@@ -585,10 +590,15 @@ public class FlowchartPanel extends JPanel {
         mxGeometry firstGeo = firstBlock.getGeometry();
 
         java.util.List<mxPoint> waypoints = new java.util.ArrayList<>();
+        double descentAmount = 30.0; // Quanto scende prima di puntare al blocco
+
         // Esce dal centro della base del FOR
         waypoints.add(new mxPoint(forX, forBottomY));
-        // Scende dritto al primo blocco
-        waypoints.add(new mxPoint(forX, firstGeo.getY()));
+        // Scende un po' verticalmente
+        waypoints.add(new mxPoint(forX, forBottomY + descentAmount));
+        // Punta al centro del lato superiore del blocco
+        waypoints.add(new mxPoint(firstGeo.getCenterX(), forBottomY + descentAmount));
+        waypoints.add(new mxPoint(firstGeo.getCenterX(), firstGeo.getY()));
 
         mxGeometry edgeGeo = edgeCell.getGeometry();
         if (edgeGeo != null) {
