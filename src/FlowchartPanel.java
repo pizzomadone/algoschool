@@ -304,42 +304,40 @@ public class FlowchartPanel extends JPanel {
         // Versione semplificata che funziona con tutte le versioni di JGraphX
         
 
-        // Default edge style
+        // Default edge style - thin black arrows with sharp corners like standard flowcharts
         Map<String, Object> edgeStyle = new HashMap<>();
         edgeStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
         edgeStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000");
-        edgeStyle.put(mxConstants.STYLE_STROKEWIDTH, 3.0); // 👈 spessore più grande
+        edgeStyle.put(mxConstants.STYLE_STROKEWIDTH, 1.5); // Sottile come nell'immagine
         edgeStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
         edgeStyle.put(mxConstants.STYLE_EDGE, mxConstants.EDGESTYLE_ORTHOGONAL);
-        edgeStyle.put(mxConstants.STYLE_ROUNDED, true);
+        edgeStyle.put(mxConstants.STYLE_ROUNDED, false); // Angoli netti, non arrotondati
 
         stylesheet.setDefaultEdgeStyle(edgeStyle);
 
 
-        // True branch - GREEN
+        // True branch - black like in the image (not green)
         Map<String, Object> trueBranchStyle = new HashMap<>();
         trueBranchStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
-        trueBranchStyle.put(mxConstants.STYLE_STROKECOLOR, "#00AA00");
-        trueBranchStyle.put(mxConstants.STYLE_FONTCOLOR, "#00AA00");
-        trueBranchStyle.put(mxConstants.STYLE_STROKEWIDTH, 3.0);
+        trueBranchStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000"); // Nero come nell'immagine
+        trueBranchStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        trueBranchStyle.put(mxConstants.STYLE_STROKEWIDTH, 1.5);
         trueBranchStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
         trueBranchStyle.put(mxConstants.STYLE_EDGE, mxConstants.EDGESTYLE_ORTHOGONAL);
-        trueBranchStyle.put(mxConstants.STYLE_ROUNDED, true);
-        trueBranchStyle.put(mxConstants.STYLE_FONTSIZE, 14);
-        trueBranchStyle.put(mxConstants.STYLE_FONTSTYLE, mxConstants.FONT_BOLD);
+        trueBranchStyle.put(mxConstants.STYLE_ROUNDED, false); // Angoli netti
+        trueBranchStyle.put(mxConstants.STYLE_FONTSIZE, 11);
         stylesheet.putCellStyle("TRUE_BRANCH", trueBranchStyle);
 
-        // False branch - RED
+        // False branch - black like in the image (not red)
         Map<String, Object> falseBranchStyle = new HashMap<>();
         falseBranchStyle.put(mxConstants.STYLE_SHAPE, mxConstants.SHAPE_CONNECTOR);
-        falseBranchStyle.put(mxConstants.STYLE_STROKECOLOR, "#CC0000");
-        falseBranchStyle.put(mxConstants.STYLE_FONTCOLOR, "#CC0000");
-        falseBranchStyle.put(mxConstants.STYLE_STROKEWIDTH, 3.0);
+        falseBranchStyle.put(mxConstants.STYLE_STROKECOLOR, "#000000"); // Nero come nell'immagine
+        falseBranchStyle.put(mxConstants.STYLE_FONTCOLOR, "#000000");
+        falseBranchStyle.put(mxConstants.STYLE_STROKEWIDTH, 1.5);
         falseBranchStyle.put(mxConstants.STYLE_ENDARROW, mxConstants.ARROW_CLASSIC);
         falseBranchStyle.put(mxConstants.STYLE_EDGE, mxConstants.EDGESTYLE_ORTHOGONAL);
-        falseBranchStyle.put(mxConstants.STYLE_ROUNDED, true);
-        falseBranchStyle.put(mxConstants.STYLE_FONTSIZE, 14);
-        falseBranchStyle.put(mxConstants.STYLE_FONTSTYLE, mxConstants.FONT_BOLD);
+        falseBranchStyle.put(mxConstants.STYLE_ROUNDED, false); // Angoli netti
+        falseBranchStyle.put(mxConstants.STYLE_FONTSIZE, 11);
         stylesheet.putCellStyle("FALSE_BRANCH", falseBranchStyle);
     }
 
@@ -375,8 +373,9 @@ public class FlowchartPanel extends JPanel {
      */
     private void applyHierarchicalLayout() {
         mxHierarchicalLayout layout = new mxHierarchicalLayout(graph);
-        layout.setInterHierarchySpacing(50);
-        layout.setInterRankCellSpacing(40);  // Dimezzato da 80 a 40 per archi più corti
+        layout.setInterHierarchySpacing(60);  // Spaziatura orizzontale tra rami paralleli
+        layout.setInterRankCellSpacing(30);   // Spaziatura verticale ridotta per archi più corti e dritti
+        layout.setIntraCellSpacing(15);       // Spaziatura minima tra celle
         layout.setOrientation(SwingConstants.NORTH);
 
         Object parent = graph.getDefaultParent();
